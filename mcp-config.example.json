@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "fabric-rti-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/fabric-rti-mcp",
+        "microsoft-fabric-rti-mcp"
+      ],
+      "env": {
+        "KUSTO_SERVICE_URI": "https://help.kusto.windows.net/",
+        "KUSTO_SERVICE_DEFAULT_DB": "Samples",
+        "FABRIC_API_BASE_URL": "https://api.fabric.microsoft.com/v1",
+
+        "DEFENDER_TENANT_ID": "<your-tenant-id>",
+        "DEFENDER_SCCAUTH": "<paste-sccauth-cookie>",
+        "DEFENDER_XSRF_TOKEN": "<paste-xsrf-token>",
+        "DEFENDER_SESS_ID": "<paste-session-id>",
+
+        "KUSTO_KNOWN_SERVICES": "[{\"service_uri\": \"defender://<your-tenant-id>\", \"default_database\": \"Defender\", \"description\": \"Defender XDR Advanced Hunting\"}]",
+
+        "AZ_OPENAI_EMBEDDING_ENDPOINT": "",
+        "KUSTO_SHOTS_TABLE": ""
+      }
+    }
+  }
+}
