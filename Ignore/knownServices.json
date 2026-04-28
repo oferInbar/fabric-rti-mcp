@@ -1,0 +1,24 @@
+{
+  "KUSTO_KNOWN_SERVICES": [
+    {
+      "service_uri": "https://ade.loganalytics.io/subscriptions/99005f96-e572-4035-b476-836fd9d83d64/resourcegroups/cybersoc/providers/microsoft.operationalinsights/workspaces/cybersoc",
+      "default_database": "cybersoc",
+      "description": "CyberSOC Sentinel Workspace"
+    },
+    {
+      "service_uri": "https://cdpkustofra01mdofc01.francecentral.kusto.windows.net",
+      "default_database": "security-db",
+      "description": "CDP Security DB (France Central)"
+    },
+    {
+      "service_uri": "https://cdpkustofra01cplfc01.francecentral.kusto.windows.net",
+      "default_database": "enriched-activity-db",
+      "description": "CDP Enriched Activity DB (France Central)"
+    },
+    {
+      "service_uri": "https://cdpkustofra01cplfc01.francecentral.kusto.windows.net",
+      "default_database": "compliance-db",
+      "description": "CDP Compliance DB (France Central)"
+    }
+  ]
+}
