@@ -5,6 +5,7 @@ import functools
 import gzip
 import inspect
 import json
+import os
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict
@@ -18,6 +19,7 @@ from fabric_rti_mcp.config import global_config, logger
 from fabric_rti_mcp.services.kusto.kusto_config import KustoConfig
 from fabric_rti_mcp.services.kusto.kusto_connection import KustoConnection, sanitize_uri
 from fabric_rti_mcp.services.kusto.kusto_formatter import KustoFormatter, KustoResponseFormat
+from fabric_rti_mcp.services.schema_catalog import schema_catalog_service as schema_catalog
 
 # ── Deeplink constants ──────────────────────────────────────────────────────────
 
@@ -235,6 +237,15 @@ _DEFAULT_DB_NAME = (
     if CONFIG.default_service
     else KustoConnectionStringBuilder.DEFAULT_DATABASE_NAME
 )
+
+_AH_MODE_RESPONSE = {"message": "This operation is not available in Advanced Hunting (AH) mode. Continuing flow."}
+
+
+def _is_ah_mode() -> bool:
+    """Check if Advanced Hunting mode is enabled via the KUSTO_AH_MODE env var (default: true)."""
+    from fabric_rti_mcp.services.kusto.kusto_config import KustoEnvVarNames
+
+    return os.getenv(KustoEnvVarNames.ah_mode, "true").lower() in ("true", "1")
 
 
 class KustoConnectionManager:
@@ -600,6 +611,8 @@ def kusto_command(
     :param client_request_properties: Optional dictionary of additional client request properties.
     :return: The result of the command execution as a list of dictionaries (json).
     """
+    if _is_ah_mode():
+        return _AH_MODE_RESPONSE
     first_stmt = _find_first_statement(command)
     if not first_stmt.startswith("."):
         raise ValueError(
@@ -627,6 +640,9 @@ def kusto_list_entities(
 
     :return: List of dictionaries containing entity information.
     """
+
+    if _is_ah_mode():
+        return _AH_MODE_RESPONSE
 
     entity_type = canonical_entity_type(entity_type)
     if entity_type == "database":
@@ -671,6 +687,38 @@ def kusto_list_entities(
     return {}
 
 
+def _lookup_schema_catalog_entity(entity_name: str) -> dict[str, Any] | None:
+    """Look up an entity in the schema catalog. Returns the schema dict or None if not found."""
+    if not schema_catalog.is_configured():
+        return None
+    for pack in schema_catalog.schema_list_packs():
+        try:
+            return schema_catalog.schema_get_table(pack["name"], entity_name)
+        except ValueError:
+            continue
+    return None
+
+
+def _lookup_schema_catalog_all_entities() -> list[dict[str, Any]] | None:
+    """Return a summary of all entities across all schema packs, or None if catalog is not configured."""
+    if not schema_catalog.is_configured():
+        return None
+    results: list[dict[str, Any]] = []
+    for pack in schema_catalog.schema_list_packs():
+        for table_name in schema_catalog.schema_list_tables(pack["name"]):
+            info = schema_catalog.schema_get_table(pack["name"], table_name)
+            results.append(
+                {
+                    "EntityName": info["table"],
+                    "EntityType": "Table",
+                    "Group": info["group"],
+                    "ColumnCount": len(info["columns"]),
+                    "Source": f"schema_catalog:{pack['name']}",
+                }
+            )
+    return results or None
+
+
 def kusto_describe_database(
     cluster_uri: str, database: str | None, client_request_properties: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -686,14 +734,26 @@ def kusto_describe_database(
     :param client_request_properties: Optional dictionary of additional client request properties.
     :return: List of dictionaries containing entity schema information.
     """
-    return _execute(
-        ".show databases entities with (showObfuscatedStrings=true) "
-        f"| where DatabaseName == '{kql_escape_string(database or _DEFAULT_DB_NAME or '')}' "
-        "| project EntityName, EntityType, Folder, DocString, CslInputSchema, Content, CslOutputSchema",
-        cluster_uri,
-        database=database,
-        client_request_properties=client_request_properties,
-    )
+    if _is_ah_mode():
+        catalog_results = _lookup_schema_catalog_all_entities()
+        if catalog_results is not None:
+            return {"source": "schema_catalog", "entities": catalog_results}
+        return _AH_MODE_RESPONSE
+    try:
+        return _execute(
+            ".show databases entities with (showObfuscatedStrings=true) "
+            f"| where DatabaseName == '{kql_escape_string(database or _DEFAULT_DB_NAME or '')}' "
+            "| project EntityName, EntityType, Folder, DocString, CslInputSchema, Content, CslOutputSchema",
+            cluster_uri,
+            database=database,
+            client_request_properties=client_request_properties,
+        )
+    except RuntimeError:
+        catalog_results = _lookup_schema_catalog_all_entities()
+        if catalog_results is not None:
+            logger.info("kusto_describe_database: management command failed, falling back to schema catalog")
+            return {"source": "schema_catalog", "entities": catalog_results}
+        raise
 
 
 def kusto_describe_database_entity(
@@ -708,6 +768,9 @@ def kusto_describe_database_entity(
     materialized view, function, graph) in the specified database.
     If no database is provided, uses the default database.
 
+    Falls back to the schema catalog (SCHEMA_CATALOG_PATH) when the management command fails
+    and the entity is found there.
+
     :param entity_name: Name of the entity to get schema for.
     :param entity_type: Type of the entity (table, external-table, materialized-view, function, graph).
     :param cluster_uri: The URI of the Kusto cluster.
@@ -718,42 +781,59 @@ def kusto_describe_database_entity(
 
     entity_type = canonical_entity_type(entity_type)
     escaped = kql_escape_entity_name(entity_name)
-    if entity_type.lower() == "table":
-        return _execute(
-            f".show table {escaped} cslschema",
-            cluster_uri,
-            database=database,
-            client_request_properties=client_request_properties,
-        )
-    elif entity_type.lower() == "external-table":
-        return _execute(
-            f".show external table {escaped} cslschema",
-            cluster_uri,
-            database=database,
-            client_request_properties=client_request_properties,
-        )
-    elif entity_type.lower() == "function":
-        return _execute(
-            f".show function {escaped}",
-            cluster_uri,
-            database=database,
-            client_request_properties=client_request_properties,
-        )
-    elif entity_type.lower() == "materialized-view":
-        return _execute(
-            f".show materialized-view {escaped} "
-            "| project Name, SourceTable, Query, LastRun, LastRunResult, IsHealthy, IsEnabled, DocString",
-            cluster_uri,
-            database=database,
-            client_request_properties=client_request_properties,
-        )
-    elif entity_type.lower() == "graph":
-        return _execute(
-            f".show graph_model {escaped} details | project Name, Model",
-            cluster_uri,
-            database=database,
-            client_request_properties=client_request_properties,
-        )
+
+    if _is_ah_mode():
+        catalog_result = _lookup_schema_catalog_entity(entity_name)
+        if catalog_result is not None:
+            return {"source": "schema_catalog", **catalog_result}
+        return _AH_MODE_RESPONSE
+
+    try:
+        if entity_type.lower() == "table":
+            return _execute(
+                f".show table {escaped} cslschema",
+                cluster_uri,
+                database=database,
+                client_request_properties=client_request_properties,
+            )
+        elif entity_type.lower() == "external-table":
+            return _execute(
+                f".show external table {escaped} cslschema",
+                cluster_uri,
+                database=database,
+                client_request_properties=client_request_properties,
+            )
+        elif entity_type.lower() == "function":
+            return _execute(
+                f".show function {escaped}",
+                cluster_uri,
+                database=database,
+                client_request_properties=client_request_properties,
+            )
+        elif entity_type.lower() == "materialized-view":
+            return _execute(
+                f".show materialized-view {escaped} "
+                "| project Name, SourceTable, Query, LastRun, LastRunResult, IsHealthy, IsEnabled, DocString",
+                cluster_uri,
+                database=database,
+                client_request_properties=client_request_properties,
+            )
+        elif entity_type.lower() == "graph":
+            return _execute(
+                f".show graph_model {escaped} details | project Name, Model",
+                cluster_uri,
+                database=database,
+                client_request_properties=client_request_properties,
+            )
+    except RuntimeError:
+        catalog_result = _lookup_schema_catalog_entity(entity_name)
+        if catalog_result is not None:
+            logger.info(
+                f"kusto_describe_database_entity: management command failed for '{entity_name}', "
+                "falling back to schema catalog"
+            )
+            return {"source": "schema_catalog", **catalog_result}
+        raise
     # Add more entity types as needed
     return {}
 
@@ -830,6 +910,8 @@ def kusto_ingest_inline_into_table(
     :param client_request_properties: Optional dictionary of additional client request properties.
     :return: List of dictionaries containing the ingestion result.
     """
+    if _is_ah_mode():
+        return _AH_MODE_RESPONSE
     return _execute(
         f".ingest inline into table {kql_escape_entity_name(table_name)} <| {data_comma_separator}",
         cluster_uri,
@@ -995,6 +1077,8 @@ def kusto_show_queryplan(
     * execution_hints.estimated_rows and shard_scans reveal the data volume the engine expects to scan.
     * has_selection=true in shard_scans means a filter narrows the scan (extent pruning applies).
     """
+    if _is_ah_mode():
+        return _AH_MODE_RESPONSE
     raw = _execute(
         f".show queryplan <| {query.strip()}",
         cluster_uri,
@@ -1045,6 +1129,8 @@ def kusto_diagnostics(
     * rowstores — rowstore state and memory usage
     * ingestion_failures — ingestion failures from the last 24 hours
     """
+    if _is_ah_mode():
+        return _AH_MODE_RESPONSE
     results: dict[str, Any] = {}
     for section, command in _DIAGNOSTICS_COMMANDS.items():
         try:

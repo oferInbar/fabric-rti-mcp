@@ -26,6 +26,9 @@ class KustoEnvVarNames:
     timeout = "FABRIC_RTI_KUSTO_TIMEOUT"
     deeplink_style = "FABRIC_RTI_KUSTO_DEEPLINK_STYLE"
     response_format = "FABRIC_RTI_KUSTO_RESPONSE_FORMAT"
+    # When True, operations that rely on Kusto management commands (.show, .ingest, etc.)
+    # are skipped. Use this when targeting Sentinel / Log Analytics (Advanced Hunting).
+    ah_mode = "KUSTO_AH_MODE"
 
     @staticmethod
     def all() -> list[str]:
@@ -40,6 +43,7 @@ class KustoEnvVarNames:
             KustoEnvVarNames.timeout,
             KustoEnvVarNames.deeplink_style,
             KustoEnvVarNames.response_format,
+            KustoEnvVarNames.ah_mode,
         ]
 
 
@@ -63,6 +67,9 @@ class KustoConfig:
     deeplink_style: str | None = None
     # Response format for Kusto query results. Default: "kusto_response".
     response_format: str = "kusto_response"
+    # Advanced Hunting (AH) mode. When True, operations that require Kusto management
+    # commands (.show, .ingest, etc.) are skipped — use when targeting Sentinel / Log Analytics.
+    ah_mode: bool = True
 
     @staticmethod
     def from_env() -> KustoConfig:
@@ -134,6 +141,7 @@ class KustoConfig:
             timeout_seconds,
             deeplink_style,
             response_format,
+            ah_mode=os.getenv(KustoEnvVarNames.ah_mode, "true").lower() in ("true", "1"),
         )
 
     @staticmethod

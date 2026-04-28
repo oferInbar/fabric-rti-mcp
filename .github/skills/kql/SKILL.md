@@ -14,21 +14,27 @@ Fabric RTI MCP exposes Kusto functionality as MCP tools. Authentication is handl
 
 ### Available tools
 
-| Tool | Purpose |
-|------|---------|
-| `kusto_query` | Execute a KQL query on a database |
-| `kusto_command` | Execute a management command (`.show`, `.create`, etc.) |
-| `kusto_list_entities` | List databases, tables, external tables, materialized views, functions, graphs |
-| `kusto_describe_database` | Get schema for all entities in a database |
-| `kusto_describe_database_entity` | Get schema for a specific entity (table, function, etc.) |
-| `kusto_sample_entity` | Get sample data from a table or other entity |
-| `kusto_graph_query` | Execute a graph query using snapshots or transient graphs |
-| `kusto_ingest_inline_into_table` | Ingest inline CSV data into a table |
-| `kusto_known_services` | List configured Kusto services |
-| `kusto_get_shots` | Retrieve semantically similar shots from a shots table |
-| `kusto_deeplink_from_query` | Build a deeplink URL to open a query in the web explorer |
-| `kusto_show_queryplan` | Get the execution plan for a query without running it |
-| `kusto_diagnostics` | Get a best-effort cluster health and capacity summary |
+| Tool | Purpose | AH mode¹ |
+|------|---------|----------|
+| `kusto_query` | Execute a KQL query on a database | ✅ |
+| `kusto_command` | Execute a management command (`.show`, `.create`, etc.) | ⛔ |
+| `kusto_list_entities` | List databases, tables, external tables, materialized views, functions, graphs | ⛔ |
+| `kusto_describe_database` | Get schema for all entities in a database (falls back to schema catalog) | ⚠️ |
+| `kusto_describe_database_entity` | Get schema for a specific entity (falls back to schema catalog) | ⚠️ |
+| `kusto_sample_entity` | Get sample data from a table or other entity | ✅ |
+| `kusto_graph_query` | Execute a graph query using snapshots or transient graphs | ✅ |
+| `kusto_ingest_inline_into_table` | Ingest inline CSV data into a table | ⛔ |
+| `kusto_known_services` | List configured Kusto services | ✅ |
+| `kusto_get_shots` | Retrieve semantically similar shots from a shots table | ✅ |
+| `kusto_deeplink_from_query` | Build a deeplink URL to open a query in the web explorer | ✅ |
+| `kusto_show_queryplan` | Get the execution plan for a query without running it | ⛔ |
+| `kusto_diagnostics` | Get a best-effort cluster health and capacity summary | ⛔ |
+
+> ¹ **AH mode** (`KUSTO_AH_MODE=true`, the default) targets Sentinel / Log Analytics /
+> Advanced Hunting workspaces where Kusto management commands are not supported.
+> ⛔ tools return an informational message and continue the flow instead of erroring.
+> ⚠️ tools skip the management command and fall back to the schema catalog if configured.
+> Disable with `KUSTO_AH_MODE=false` for native ADX / Fabric Eventhouse clusters.
 
 ### Query vs management commands
 
@@ -42,14 +48,14 @@ KQL has two execution planes, each with its own MCP tool:
 ### Basic usage
 
 ```
-# Query plane — use kusto_query
+# Query plane — use kusto_query (works in all modes)
 kusto_query(
     cluster_uri="https://help.kusto.windows.net",
     database="Samples",
     query="StormEvents | summarize count() by EventType | top 5 by count_ desc"
 )
 
-# Management plane — use kusto_command
+# Management plane — use kusto_command (native ADX/Fabric only; skipped in AH mode)
 kusto_command(
     cluster_uri="https://help.kusto.windows.net",
     database="Samples",
@@ -57,12 +63,13 @@ kusto_command(
 )
 
 # Schema exploration — use kusto_describe_database or kusto_describe_database_entity
+# In AH mode these fall back to the schema catalog; if not configured, use kusto_query + getschema
 kusto_describe_database(
     cluster_uri="https://help.kusto.windows.net",
     database="Samples"
 )
 
-# Sample data — use kusto_sample_entity
+# Sample data — use kusto_sample_entity (works in all modes)
 kusto_sample_entity(
     cluster_uri="https://help.kusto.windows.net",
     database="Samples",
@@ -71,7 +78,7 @@ kusto_sample_entity(
     sample_size=5
 )
 
-# Graph queries — use kusto_graph_query
+# Graph queries — use kusto_graph_query (works in all modes)
 kusto_graph_query(
     cluster_uri="https://mycluster.kusto.windows.net",
     database="MyDB",
@@ -79,7 +86,7 @@ kusto_graph_query(
     query="| graph-match (node) project labels=labels(node)"
 )
 
-# Deeplinks — use kusto_deeplink_from_query
+# Deeplinks — use kusto_deeplink_from_query (works in all modes)
 kusto_deeplink_from_query(
     cluster_uri="https://help.kusto.windows.net",
     database="Samples",
@@ -89,13 +96,21 @@ kusto_deeplink_from_query(
 
 ### Exploration workflow
 
-When encountering a new cluster or database:
+**Native ADX / Fabric Eventhouse** (`KUSTO_AH_MODE=false`):
 
 1. **List entities**: `kusto_list_entities(cluster_uri, entity_type="tables", database="MyDB")`
 2. **Get schema**: `kusto_describe_database_entity(entity_name="MyTable", entity_type="table", cluster_uri=..., database=...)`
 3. **Sample data**: `kusto_sample_entity(entity_name="MyTable", entity_type="table", cluster_uri=..., sample_size=5)`
 4. **Count rows**: `kusto_query(query="MyTable | count", cluster_uri=..., database=...)`
 5. **Run analysis**: `kusto_query(query="MyTable | where ... | summarize ...", cluster_uri=..., database=...)`
+
+**Sentinel / Log Analytics / Advanced Hunting** (`KUSTO_AH_MODE=true`, default) — use `kusto_query` for all discovery. See `references/discovery-queries-ah.md` for patterns. Quick reference:
+
+1. **Discover tables**: `kusto_query(query="union withsource=T * | summarize count() by T | order by count_ desc", ...)`
+2. **Get schema**: `kusto_query(query="MyTable | getschema", ...)`
+3. **Sample data**: `kusto_sample_entity(entity_name="MyTable", entity_type="table", ...)` or `kusto_query(query="MyTable | take 10", ...)`
+4. **Count rows**: `kusto_query(query="MyTable | count", ...)`
+5. **Run analysis**: `kusto_query(query="MyTable | where ... | summarize ...", ...)`
 
 ## 2. Dynamic Type Discipline
 

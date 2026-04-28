@@ -418,3 +418,6 @@ dist/
 
 */**/_version.py
 OneSoc internal knowledge plan.md
+Ignore/DefenderSchema.json
+Ignore/evaluation_defender_2024_05_23.jsonl
+Ignore/evaluation_sentinel_2024_05_23.jsonl

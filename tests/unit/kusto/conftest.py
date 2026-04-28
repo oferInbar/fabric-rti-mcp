@@ -8,6 +8,12 @@ from azure.kusto.data.response import KustoResponseDataSetV1
 from fabric_rti_mcp.services.kusto.kusto_connection import KustoConnection
 
 
+@pytest.fixture(autouse=True)
+def disable_ah_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disable AH mode by default so tests exercise full Kusto command paths."""
+    monkeypatch.setenv("KUSTO_AH_MODE", "false")
+
+
 @pytest.fixture
 def mock_kusto_response() -> KustoResponseDataSetV1:
     """Create a minimal KustoResponseDataSet for testing."""
