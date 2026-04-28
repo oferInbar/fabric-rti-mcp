@@ -300,6 +300,10 @@ None - the server will work with default settings for demo purposes.
 | `FABRIC_API_BASE` | Global | Base URL for Microsoft Fabric API | `https://api.fabric.microsoft.com/v1` | `https://api.fabric.microsoft.com/v1` |
 | `FABRIC_BASE_URL` | Global | Base URL for Microsoft Fabric web interface | `https://fabric.microsoft.com` | `https://fabric.microsoft.com` |
 | `FABRIC_RTI_KUSTO_DEEPLINK_STYLE` | Kusto | Override auto-detection of deeplink style | None | `adx` or `fabric` |
+| `DEFENDER_SCCAUTH` | Defender | Session cookie from security.microsoft.com (see [Defender Setup](#-defender-advanced-hunting-setup)) | None | `amdC15M...` |
+| `DEFENDER_XSRF_TOKEN` | Defender | XSRF token from security.microsoft.com | None | `prtkNWe...` |
+| `DEFENDER_TENANT_ID` | Defender | Azure AD tenant ID for Defender portal | None | `0527ecb7-06fb-...` |
+| `DEFENDER_SESS_ID` | Defender | Session ID cookie (optional) | None | `8df90b0c-...` |
 
 ### Embedding Endpoint Configuration
 
@@ -325,6 +329,130 @@ https://{your-openai-resource}.openai.azure.com/openai/deployments/{deployment-n
 The `kusto_get_shots` tool retrieves shots that are most similar to your prompt from the shots table. This function requires configuration of:
 - **Shots table**: Should have an "EmbeddingText" (string) column containing the natural language prompt, "AugmentedText" (string) column containing the respective KQL, and "EmbeddingVector" (dynamic) column containing the embedding vector of the EmbeddingText.
 - **Azure OpenAI embedding endpoint**: Used to create embedding vectors for your prompt. Note that this endpoint must use the same model that was used for creating the "EmbeddingVector" column in the shots table.
+
+### Connecting to Microsoft Sentinel / Defender XDR Logs
+
+By default, Defender XDR and Sentinel logs are stored in Microsoft's backend and are **not accessible from regular ADX clusters**. To query these logs via the MCP, you can use the **ADX proxy for Log Analytics** (`ade.loganalytics.io`), which exposes your workspace tables as if they were standard Kusto tables.
+
+#### How It Works
+
+```
+Agent → ade.loganalytics.io (ADX proxy) → Log Analytics workspace → Defender XDR / Sentinel tables
+```
+
+The proxy URI follows this pattern:
+```
+https://ade.loganalytics.io/subscriptions/{subscription-id}/resourcegroups/{resource-group}/providers/microsoft.operationalinsights/workspaces/{workspace-name}
+```
+
+#### Getting Your Proxy URI
+
+**Option A: Azure Portal**
+
+1. Go to the [Azure Portal](https://portal.azure.com) → search for **Log Analytics workspaces**
+2. Select your workspace (the one connected to Sentinel / Defender XDR)
+3. From the **Overview** page, note the **Subscription ID**, **Resource Group**, and **Workspace Name**
+4. Build the URI using the pattern above
+
+**Option B: Azure CLI**
+
+```bash
+# List all Log Analytics workspaces in your subscription
+az monitor log-analytics workspace list --query "[].{name:name, resourceGroup:resourceGroup, id:id}" -o table
+
+# Get the details for a specific workspace
+az monitor log-analytics workspace show --workspace-name <YOUR_WORKSPACE_NAME> --resource-group <YOUR_RESOURCE_GROUP> --query "{name:name, resourceGroup:resourceGroup, subscriptionId:id}" -o json
+```
+
+Then build the proxy URI:
+```bash
+# Example: construct the proxy URI from workspace details
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+RG="<YOUR_RESOURCE_GROUP>"
+WORKSPACE="<YOUR_WORKSPACE_NAME>"
+
+echo "https://ade.loganalytics.io/subscriptions/${SUBSCRIPTION_ID}/resourcegroups/${RG}/providers/microsoft.operationalinsights/workspaces/${WORKSPACE}"
+```
+
+#### Configuring `KUSTO_KNOWN_SERVICES`
+
+Add the proxy URI to your MCP configuration:
+
+```json
+"KUSTO_KNOWN_SERVICES": "[{\"service_uri\": \"https://ade.loganalytics.io/subscriptions/YOUR-SUB-ID/resourcegroups/YOUR-RG/providers/microsoft.operationalinsights/workspaces/YOUR-WORKSPACE\", \"default_database\": \"YOUR-WORKSPACE-NAME\", \"description\": \"Sentinel/Defender XDR workspace\"}]"
+```
+
+> **Note:** The `default_database` should match your workspace name.
+
+#### Requirements
+
+- **RBAC permissions**: You need at least **Log Analytics Reader** role on the workspace
+- **No extra setup**: The `ade.loganalytics.io` proxy is a built-in Microsoft service — there is nothing to install or enable
+
+Once configured, the agent can query Sentinel and Defender XDR tables (e.g., `SecurityEvent`, `DeviceProcessEvents`, `SigninLogs`) using natural language.
+
+### 🛡️ Defender Advanced Hunting Setup
+
+For tables that are **only available in the Defender portal** (e.g., `EntraIdSignInEvents`, `DeviceLogonEvents`, `CloudAppEvents` — 107 tables total), you can use the cookie-based Defender integration. This routes queries through the Defender portal API using your browser session.
+
+#### How It Works
+
+```
+Agent → kusto_query(cluster_uri="defender://tenant-id") → Defender Portal API → All 107 Defender XDR tables
+```
+
+#### Setup Steps
+
+1. **Sign in** to https://security.microsoft.com/v2/advanced-hunting
+2. **Open DevTools** (F12) → Network tab
+3. **Run any query** in the portal (e.g., `DeviceLogonEvents | take 1`)
+4. **Find the `queryExecutor` request** in the Network tab
+5. **Extract these values:**
+   - `sccauth` cookie value (from Cookie header or Application → Cookies)
+   - `x-xsrf-token` header value (from Request Headers)
+6. **Set environment variables** in your `.env` file or MCP config:
+
+```bash
+# .env file
+DEFENDER_SCCAUTH=<paste sccauth cookie value>
+DEFENDER_XSRF_TOKEN=<paste x-xsrf-token header value>
+DEFENDER_TENANT_ID=<your-tenant-id>
+```
+
+Or in your MCP config `env` block:
+```json
+"env": {
+    "DEFENDER_SCCAUTH": "<sccauth cookie>",
+    "DEFENDER_XSRF_TOKEN": "<xsrf token>",
+    "DEFENDER_TENANT_ID": "<tenant-id>"
+}
+```
+
+#### Usage
+
+Use the `defender://` URI scheme as the cluster URI:
+
+```
+defender://<tenant-id>
+```
+
+Example: `defender://0527ecb7-06fb-4769-b324-fd4a3bb865eb`
+
+Add it to `KUSTO_KNOWN_SERVICES` for automatic discovery:
+
+```json
+"KUSTO_KNOWN_SERVICES": "[{\"service_uri\": \"defender://YOUR-TENANT-ID\", \"default_database\": \"Defender\", \"description\": \"Defender XDR Advanced Hunting\"}]"
+```
+
+Then query Defender tables via natural language or directly:
+- "Show me recent sign-in events from EntraIdSignInEvents"
+- "List device logon events from the last hour"
+
+#### Limitations
+
+- **Cookies expire** after a few hours — you need to refresh them from the browser when they expire
+- **Auth errors** (401/403) mean the cookie has expired; repeat the setup steps to get fresh values
+- This is a temporary solution until Graph API access (`ThreatHunting.Read.All`) is granted via admin consent
 
 ## 🔑 Authentication
 

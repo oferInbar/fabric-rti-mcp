@@ -26,6 +26,7 @@ class KustoEnvVarNames:
     timeout = "FABRIC_RTI_KUSTO_TIMEOUT"
     deeplink_style = "FABRIC_RTI_KUSTO_DEEPLINK_STYLE"
     response_format = "FABRIC_RTI_KUSTO_RESPONSE_FORMAT"
+    schema_file = "KUSTO_SCHEMA_FILE"
 
     @staticmethod
     def all() -> list[str]:
@@ -40,6 +41,7 @@ class KustoEnvVarNames:
             KustoEnvVarNames.timeout,
             KustoEnvVarNames.deeplink_style,
             KustoEnvVarNames.response_format,
+            KustoEnvVarNames.schema_file,
         ]
 
 
