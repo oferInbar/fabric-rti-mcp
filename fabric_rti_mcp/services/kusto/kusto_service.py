@@ -8,7 +8,7 @@ import json
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 from urllib.parse import quote, urlparse
 
 from azure.kusto.data import ClientRequestProperties, KustoConnectionStringBuilder
@@ -18,6 +18,15 @@ from fabric_rti_mcp.config import global_config, logger
 from fabric_rti_mcp.services.kusto.kusto_config import KustoConfig
 from fabric_rti_mcp.services.kusto.kusto_connection import KustoConnection, sanitize_uri
 from fabric_rti_mcp.services.kusto.kusto_formatter import KustoFormatter, KustoResponseFormat
+from fabric_rti_mcp.services.kusto.defender_service import defender_query, is_defender_uri
+from fabric_rti_mcp.services.kusto.kusto_schema_provider import (
+    format_static_cslschema,
+    format_static_database_entities,
+    format_static_table_list,
+    get_static_table_names,
+    get_static_table_schema,
+    is_adx_proxy,
+)
 
 # ── Deeplink constants ──────────────────────────────────────────────────────────
 
@@ -429,6 +438,8 @@ def kusto_query(
             "kusto_query is for KQL queries, not management commands. "
             "Management commands (starting with '.') should use kusto_command instead."
         )
+    if is_defender_uri(cluster_uri):
+        return defender_query(query, cluster_uri, database)
     return _execute(query, cluster_uri, database=database, client_request_properties=client_request_properties)
 
 
@@ -629,6 +640,11 @@ def kusto_list_entities(
     """
 
     entity_type = canonical_entity_type(entity_type)
+
+    # ADX proxy fallback: `.show` commands are not supported
+    if is_adx_proxy(cluster_uri) and entity_type == "table":
+        return format_static_table_list(get_static_table_names())
+
     if entity_type == "database":
         return _execute(
             ".show databases | project DatabaseName, DatabaseAccessMode, PrettyName, DatabaseId",
@@ -686,6 +702,10 @@ def kusto_describe_database(
     :param client_request_properties: Optional dictionary of additional client request properties.
     :return: List of dictionaries containing entity schema information.
     """
+    # ADX proxy fallback: `.show databases entities` is not supported
+    if is_adx_proxy(cluster_uri):
+        return format_static_database_entities(get_static_table_names())
+
     return _execute(
         ".show databases entities with (showObfuscatedStrings=true) "
         f"| where DatabaseName == '{kql_escape_string(database or _DEFAULT_DB_NAME or '')}' "
@@ -719,6 +739,17 @@ def kusto_describe_database_entity(
     entity_type = canonical_entity_type(entity_type)
     escaped = kql_escape_entity_name(entity_name)
     if entity_type.lower() == "table":
+        # ADX proxy fallback: try static schema, then KQL getschema
+        if is_adx_proxy(cluster_uri):
+            static = get_static_table_schema(entity_name)
+            if static is not None:
+                return format_static_cslschema(entity_name, static)
+            return _execute(
+                f"{escaped} | getschema",
+                cluster_uri,
+                database=database,
+                client_request_properties=client_request_properties,
+            )
         return _execute(
             f".show table {escaped} cslschema",
             cluster_uri,
@@ -881,17 +912,19 @@ def kusto_get_shots(
 
 def _rows_to_dicts(result: dict[str, Any]) -> list[dict[str, Any]]:
     """Convert a kusto_response result into a compact list of row-dicts."""
-    data = result.get("data", {})
+    data: Any = result.get("data", {})
     fmt = result.get("format", "")
     if fmt == "kusto_response":
         columns = [c["ColumnName"] for c in data.get("columns", [])]
         return [dict(zip(columns, row)) for row in data.get("rows", [])]
     if isinstance(data, dict):
-        columns = list(data.keys())
-        if not columns:
+        data_dict = cast(dict[str, Any], data)
+        col_names = list(data_dict.keys())
+        if not col_names:
             return []
-        row_count = len(data[columns[0]]) if data[columns[0]] else 0
-        return [{col: data[col][i] for col in columns} for i in range(row_count)]
+        first_col_vals: Any = data_dict[col_names[0]]
+        row_count: int = len(first_col_vals) if first_col_vals else 0
+        return [{col: data_dict[col][i] for col in col_names} for i in range(row_count)]
     return []
 
 
@@ -907,20 +940,21 @@ def _extract_physical_plan_hints(plan_json: dict[str, Any]) -> dict[str, Any]:
     def _walk(obj: Any) -> None:
         if not isinstance(obj, dict):
             if isinstance(obj, list):
-                for item in obj:
+                for item in cast(list[Any], obj):
                     _walk(item)
             return
-        if "TotalRowCount" in obj and "HasSelection" in obj:
+        obj_dict = cast(dict[str, Any], obj)
+        if "TotalRowCount" in obj_dict and "HasSelection" in obj_dict:
             shard: dict[str, Any] = {
-                "total_rows": obj["TotalRowCount"],
-                "has_selection": obj["HasSelection"],
+                "total_rows": obj_dict["TotalRowCount"],
+                "has_selection": obj_dict["HasSelection"],
             }
             shards.append(shard)
-        if "StrategyHint" in obj:
-            sh = obj["StrategyHint"]
-            hints.setdefault("concurrency", sh.get("Concurrency"))
-            hints.setdefault("spread", sh.get("Spread"))
-        for v in obj.values():
+        if "StrategyHint" in obj_dict:
+            strategy_hint: dict[str, Any] = obj_dict["StrategyHint"]
+            hints.setdefault("concurrency", strategy_hint.get("Concurrency"))
+            hints.setdefault("spread", strategy_hint.get("Spread"))
+        for v in obj_dict.values():
             _walk(v)
 
     _walk(plan_json.get("RootOperator", {}))
@@ -1001,8 +1035,8 @@ def kusto_show_queryplan(
         database=database,
         client_request_properties=client_request_properties,
     )
-    data = raw.get("data", {})
-    rows = data.get("rows", []) if raw.get("format") == "kusto_response" else []
+    data: dict[str, Any] = raw.get("data", {})
+    rows: list[list[Any]] = data.get("rows", []) if raw.get("format") == "kusto_response" else []
     if not rows:
         return raw
     return _parse_queryplan_content(rows)
