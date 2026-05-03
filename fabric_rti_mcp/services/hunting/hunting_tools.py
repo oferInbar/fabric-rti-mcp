@@ -11,3 +11,11 @@ def register_tools(mcp: FastMCP) -> None:
         hunting_service.run_hunting_query,
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
     )
+    mcp.add_tool(
+        hunting_service.get_hunting_schema,
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    )
+    mcp.add_tool(
+        hunting_service.get_table_schema,
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    )

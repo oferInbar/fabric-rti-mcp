@@ -22,6 +22,8 @@ class GlobalFabricRTIEnvVarNames:
     use_obo_flow = "USE_OBO_FLOW"
     use_ai_foundry_compat = "FABRIC_RTI_AI_FOUNDRY_COMPATIBILITY_SCHEMA"
     cors_allowed_origins = "FABRIC_RTI_CORS_ORIGINS"
+    ah_mode = "AH_MODE"
+    instructions = "FABRIC_RTI_INSTRUCTIONS"
 
 
 DEFAULT_FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
@@ -48,6 +50,8 @@ class GlobalFabricRTIConfig:
     use_obo_flow: bool
     use_ai_foundry_compat: bool
     cors_allowed_origins: str
+    ah_mode: bool
+    instructions: str | None
 
     @staticmethod
     def from_env() -> GlobalFabricRTIConfig:
@@ -73,6 +77,8 @@ class GlobalFabricRTIConfig:
             cors_allowed_origins=os.getenv(
                 GlobalFabricRTIEnvVarNames.cors_allowed_origins, DEFAULT_FABRIC_RTI_CORS_ORIGINS
             ),
+            ah_mode=os.getenv(GlobalFabricRTIEnvVarNames.ah_mode, "false").lower() in ("true", "1"),
+            instructions=os.getenv(GlobalFabricRTIEnvVarNames.instructions, None),
         )
 
     @staticmethod
@@ -90,6 +96,8 @@ class GlobalFabricRTIConfig:
             GlobalFabricRTIEnvVarNames.use_obo_flow,
             GlobalFabricRTIEnvVarNames.use_ai_foundry_compat,
             GlobalFabricRTIEnvVarNames.cors_allowed_origins,
+            GlobalFabricRTIEnvVarNames.ah_mode,
+            GlobalFabricRTIEnvVarNames.instructions,
         ]
         for env_var in env_vars:
             if os.getenv(env_var) is not None:
@@ -138,6 +146,8 @@ class GlobalFabricRTIConfig:
             use_obo_flow=use_obo_flow,
             use_ai_foundry_compat=use_ai_foundry_compat,
             cors_allowed_origins=base_config.cors_allowed_origins,
+            ah_mode=base_config.ah_mode,
+            instructions=base_config.instructions,
         )
 
 

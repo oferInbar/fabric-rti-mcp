@@ -33,8 +33,25 @@ def setup_shutdown_handler(sig: int, frame: types.FrameType | None) -> None:
     sys.exit(0)
 
 
+AH_MODE_INSTRUCTIONS = (
+    "This server provides access to Microsoft 365 Defender Advanced Hunting. "
+    "Use the run_hunting_query tool to execute KQL queries against Defender tables such as "
+    "DeviceProcessEvents, DeviceNetworkEvents, DeviceFileEvents, DeviceRegistryEvents, "
+    "DeviceLogonEvents, DeviceImageLoadEvents, DeviceEvents, EmailEvents, EmailAttachmentInfo, "
+    "EmailUrlInfo, IdentityLogonEvents, IdentityQueryEvents, IdentityDirectoryEvents, "
+    "CloudAppEvents, AlertInfo, AlertEvidence, and more. "
+    "Use the get_hunting_schema tool to discover all available tables and their columns. "
+    "Queries use Kusto Query Language (KQL) syntax."
+)
+
+
 def register_tools(mcp: FastMCP) -> None:
-    """Register all tools with the MCP server."""
+    """Register tools with the MCP server based on the configured mode."""
+    if config.ah_mode:
+        logger.info("AH_MODE enabled — registering only Advanced Hunting tools")
+        hunting_tools.register_tools(mcp)
+        return
+
     logger.info("Kusto configuration keys found in environment:")
     logger.info(", ".join(kusto_config.KustoConfig.existing_env_vars()))
 
@@ -101,16 +118,21 @@ def main() -> None:
         name = "fabric-rti-mcp-server"
         fastmcp_class = SchemaCompatibleMCP if config.use_ai_foundry_compat else FastMCP
 
+        instructions = config.instructions
+        if not instructions and config.ah_mode:
+            instructions = AH_MODE_INSTRUCTIONS
+
         if config.transport == "http":
             fastmcp_server = fastmcp_class(
                 name,
+                instructions=instructions,
                 host=config.http_host,
                 port=config.http_port,
                 streamable_http_path=config.http_path,
                 stateless_http=config.stateless_http,
             )
         else:
-            fastmcp_server = fastmcp_class(name)
+            fastmcp_server = fastmcp_class(name, instructions=instructions)
 
         # 1. Register tools
         register_tools(fastmcp_server)
@@ -118,8 +140,11 @@ def main() -> None:
         # 2. Add HTTP-specific features if in HTTP mode
         if config.transport == "http":
             add_health_endpoint(fastmcp_server)
-            logger.info("Adding authorization middleware")
-            add_auth_middleware(fastmcp_server)
+            if os.getenv("FABRIC_RTI_DISABLE_AUTH", "").lower() in ("true", "1"):
+                logger.warning("Authorization middleware DISABLED (FABRIC_RTI_DISABLE_AUTH is set)")
+            else:
+                logger.info("Adding authorization middleware")
+                add_auth_middleware(fastmcp_server)
 
         # TBD - Add telemetry
 

@@ -131,3 +131,149 @@ def test_run_hunting_query_complex_kql(mock_http_client: MagicMock) -> None:
         "/security/runHuntingQuery",
         {"Query": query, "Timespan": "P7D"},
     )
+
+
+def test_run_hunting_query_custom_field_name(mock_http_client: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that HUNTING_QUERY_FIELD_NAME env var overrides the query field name."""
+    monkeypatch.setattr(hunting_service, "_QUERY_FIELD", "queryText")
+    mock_http_client.make_request.return_value = {"schema": [], "results": []}
+
+    query = "DeviceProcessEvents | limit 1"
+    hunting_service.run_hunting_query(query, timespan="P7D")
+
+    mock_http_client.make_request.assert_called_once_with(
+        "POST",
+        "/security/runHuntingQuery",
+        {"queryText": query, "Timespan": "P7D"},
+    )
+
+
+def test_get_hunting_schema(mock_http_client: MagicMock) -> None:
+    """Test retrieving the Advanced Hunting schema returns compact markdown."""
+    schema_response = [
+        {
+            "Name": "DeviceProcessEvents",
+            "TableSection": "Devices",
+            "HasData": True,
+            "Schema": [
+                {"Name": "Timestamp", "Type": "DateTime", "Description": "Timestamp", "Entity": None},
+                {"Name": "DeviceId", "Type": "String", "Description": "Device ID", "Entity": "Machine"},
+            ],
+        },
+        {
+            "Name": "EmailEvents",
+            "TableSection": "Emails",
+            "HasData": True,
+            "Schema": [
+                {"Name": "Timestamp", "Type": "DateTime", "Description": "Timestamp", "Entity": None},
+            ],
+        },
+    ]
+    mock_http_client.make_request.return_value = schema_response
+    hunting_service._HuntingSchemaCache.clear()
+
+    result = hunting_service.get_hunting_schema()
+
+    assert "# Advanced Hunting Schema (2 tables)" in result
+    assert "## Devices" in result
+    assert "- DeviceProcessEvents (2 columns)" in result
+    assert "## Emails" in result
+    assert "- EmailEvents (1 columns)" in result
+
+
+def test_get_hunting_schema_error(mock_http_client: MagicMock) -> None:
+    """Test that error responses are returned as text."""
+    error_response = {"error": True, "status_code": 403, "detail": "Forbidden"}
+    mock_http_client.make_request.return_value = error_response
+    hunting_service._HuntingSchemaCache.clear()
+
+    result = hunting_service.get_hunting_schema()
+
+    assert "Error fetching schema" in result
+
+
+def test_get_table_schema(mock_http_client: MagicMock) -> None:
+    """Test retrieving schema for a single table."""
+    schema_response = [
+        {
+            "Name": "DeviceProcessEvents",
+            "TableSection": "Devices",
+            "HasData": True,
+            "Schema": [
+                {"Name": "Timestamp", "Type": "DateTime", "Description": "Date and time", "Entity": None},
+                {"Name": "DeviceId", "Type": "String", "Description": "Device ID", "Entity": "Machine"},
+                {"Name": "FileName", "Type": "String", "Description": "", "Entity": None},
+            ],
+        },
+    ]
+    mock_http_client.make_request.return_value = schema_response
+    hunting_service._HuntingSchemaCache.clear()
+
+    result = hunting_service.get_table_schema("DeviceProcessEvents")
+
+    assert "## DeviceProcessEvents (Devices)" in result
+    assert "  Timestamp: DateTime - Date and time" in result
+    assert "  DeviceId: String [Machine] - Device ID" in result
+    assert "  FileName: String" in result
+    # No trailing " - " for empty description
+    assert "FileName: String\n" in result or "FileName: String" in result
+
+
+def test_get_table_schema_case_insensitive(mock_http_client: MagicMock) -> None:
+    """Test that table lookup is case-insensitive."""
+    schema_response = [
+        {
+            "Name": "DeviceProcessEvents",
+            "TableSection": "Devices",
+            "HasData": True,
+            "Schema": [
+                {"Name": "Timestamp", "Type": "DateTime", "Description": "Timestamp", "Entity": None},
+            ],
+        },
+    ]
+    mock_http_client.make_request.return_value = schema_response
+    hunting_service._HuntingSchemaCache.clear()
+
+    result = hunting_service.get_table_schema("deviceprocessevents")
+
+    assert "## DeviceProcessEvents (Devices)" in result
+
+
+def test_get_table_schema_not_found(mock_http_client: MagicMock) -> None:
+    """Test error message when table is not found."""
+    schema_response = [
+        {
+            "Name": "DeviceProcessEvents",
+            "TableSection": "Devices",
+            "HasData": True,
+            "Schema": [],
+        },
+    ]
+    mock_http_client.make_request.return_value = schema_response
+    hunting_service._HuntingSchemaCache.clear()
+
+    result = hunting_service.get_table_schema("NonExistentTable")
+
+    assert "not found" in result
+    assert "DeviceProcessEvents" in result
+
+
+def test_schema_cache_reuses_result(mock_http_client: MagicMock) -> None:
+    """Test that schema is fetched only once and cached."""
+    schema_response = [
+        {
+            "Name": "DeviceProcessEvents",
+            "TableSection": "Devices",
+            "HasData": True,
+            "Schema": [{"Name": "Timestamp", "Type": "DateTime", "Description": "", "Entity": None}],
+        },
+    ]
+    mock_http_client.make_request.return_value = schema_response
+    hunting_service._HuntingSchemaCache.clear()
+
+    # Call both tools
+    hunting_service.get_hunting_schema()
+    hunting_service.get_table_schema("DeviceProcessEvents")
+
+    # API called only once
+    mock_http_client.make_request.assert_called_once_with("GET", hunting_service._SCHEMA_ENDPOINT)

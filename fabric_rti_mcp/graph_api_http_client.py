@@ -4,18 +4,21 @@ from collections.abc import Coroutine
 from typing import Any, cast
 
 import httpx
-from azure.identity import ClientSecretCredential, DefaultAzureCredential
+from azure.identity import ChainedTokenCredential, ClientSecretCredential, DefaultAzureCredential
 
 from fabric_rti_mcp.config import logger
 
-GRAPH_API_BASE_URL = "https://graph.microsoft.com/v1.0"
-GRAPH_TOKEN_SCOPE = "https://graph.microsoft.com/.default"
+GRAPH_API_BASE_URL_DEFAULT = "https://graph.microsoft.com/v1.0"
+GRAPH_TOKEN_SCOPE_DEFAULT = "https://graph.microsoft.com/.default"
 
 
 class GraphEnvVarNames:
     tenant_id = "FABRIC_GRAPH_TENANT_ID"
     client_id = "FABRIC_GRAPH_CLIENT_ID"
     client_secret = "FABRIC_GRAPH_CLIENT_SECRET"
+    api_base_url = "FABRIC_GRAPH_API_BASE_URL"
+    token_scope = "FABRIC_GRAPH_TOKEN_SCOPE"
+    auth_prefer_default = "FABRIC_GRAPH_AUTH_PREFER_DEFAULT"
 
 
 class GraphAPIHttpClient:
@@ -29,29 +32,47 @@ class GraphAPIHttpClient:
     - Default Azure credential: falls back to az login / managed identity / etc.
     """
 
-    def __init__(self, api_base_url: str = GRAPH_API_BASE_URL):
-        self.api_base_url = api_base_url.rstrip("/")
+    def __init__(self, api_base_url: str | None = None):
+        self.api_base_url = (
+            api_base_url or os.getenv(GraphEnvVarNames.api_base_url, GRAPH_API_BASE_URL_DEFAULT)
+        ).rstrip("/")
         self.credential = self._get_credential()
-        self.token_scope = GRAPH_TOKEN_SCOPE
+        self.token_scope = os.getenv(GraphEnvVarNames.token_scope, GRAPH_TOKEN_SCOPE_DEFAULT)
 
-    def _get_credential(self) -> ClientSecretCredential | DefaultAzureCredential:
+    def _get_credential(
+        self,
+    ) -> ClientSecretCredential | DefaultAzureCredential | ChainedTokenCredential:
         tenant_id = os.getenv(GraphEnvVarNames.tenant_id)
         client_id = os.getenv(GraphEnvVarNames.client_id)
         client_secret = os.getenv(GraphEnvVarNames.client_secret)
+        prefer_default = os.getenv(GraphEnvVarNames.auth_prefer_default, "").lower() in ("true", "1", "yes")
 
-        if tenant_id and client_id and client_secret:
-            logger.info("Using client credentials for Graph API authentication")
-            return ClientSecretCredential(
-                tenant_id=tenant_id,
-                client_id=client_id,
-                client_secret=client_secret,
-            )
-
-        logger.info("Using DefaultAzureCredential for Graph API authentication")
-        return DefaultAzureCredential(
+        has_client_creds = bool(tenant_id and client_id and client_secret)
+        default_cred = DefaultAzureCredential(
             exclude_shared_token_cache_credential=True,
             exclude_interactive_browser_credential=False,
         )
+
+        if prefer_default and has_client_creds:
+            # Try az login / managed identity first, fall back to app registration
+            logger.info("Using ChainedTokenCredential: DefaultAzureCredential → ClientSecretCredential")
+            app_cred = ClientSecretCredential(
+                tenant_id=tenant_id,  # type: ignore[arg-type]
+                client_id=client_id,  # type: ignore[arg-type]
+                client_secret=client_secret,  # type: ignore[arg-type]
+            )
+            return ChainedTokenCredential(default_cred, app_cred)
+
+        if has_client_creds:
+            logger.info("Using client credentials for Graph API authentication")
+            return ClientSecretCredential(
+                tenant_id=tenant_id,  # type: ignore[arg-type]
+                client_id=client_id,  # type: ignore[arg-type]
+                client_secret=client_secret,  # type: ignore[arg-type]
+            )
+
+        logger.info("Using DefaultAzureCredential for Graph API authentication")
+        return default_cred
 
     def _get_access_token(self) -> str:
         try:
@@ -155,5 +176,5 @@ class GraphHttpClientCache:
     def get_client(cls) -> GraphAPIHttpClient:
         if cls._connection is None:
             cls._connection = GraphAPIHttpClient()
-            logger.info(f"Created Graph API connection for: {GRAPH_API_BASE_URL}")
+            logger.info(f"Created Graph API connection for: {cls._connection.api_base_url}")
         return cls._connection

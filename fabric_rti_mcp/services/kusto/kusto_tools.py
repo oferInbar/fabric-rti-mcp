@@ -1,7 +1,9 @@
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from fabric_rti_mcp.config import logger
 from fabric_rti_mcp.services.kusto import kusto_service
+from fabric_rti_mcp.services.kusto.kusto_config import KustoConfig
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -41,10 +43,16 @@ def register_tools(mcp: FastMCP) -> None:
         kusto_service.kusto_ingest_inline_into_table,
         annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False),
     )
-    mcp.add_tool(
-        kusto_service.kusto_get_shots,
-        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False),
-    )
+
+    config = KustoConfig.from_env()
+    if config.shots_table:
+        mcp.add_tool(
+            kusto_service.kusto_get_shots,
+            annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+        )
+    else:
+        logger.info("kusto_get_shots tool not registered: KUSTO_SHOTS_TABLE is not configured")
+
     mcp.add_tool(
         kusto_service.kusto_deeplink_from_query,
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
