@@ -40,6 +40,11 @@ The Fabric RTI MCP Server acts as a bridge between AI agents and Microsoft Fabri
 - List Map items in workspaces
 - Delete Map items
 
+**Advanced Hunting**: Run [advanced hunting queries](https://learn.microsoft.com/en-us/graph/api/security-security-runhuntingquery) via the Microsoft Graph Security API:
+- Execute KQL queries against Microsoft 365 Defender data (devices, emails, identities, apps)
+- Proactively hunt for threats across your environment
+- Optional timespan filtering (ISO 8601 duration or date ranges)
+
 ### 🧠 Copilot Skills
 
 This repository includes a **KQL Copilot Skill** (`.github/skills/kql/`) that gives AI agents deep KQL expertise when writing, debugging, or reviewing Kusto queries. The skill covers:
@@ -83,6 +88,12 @@ The skill references the Fabric RTI MCP tools (`kusto_query`, `kusto_command`, `
 - "List all Map items in my workspace"
 - "Create a new Map and add LakeHouse with name 'MyLakeHouse' as a data source to Map item 'MyMap'"
 - "Delete a Map item with name 'MyMap' from my workspace"
+
+**Advanced Hunting:**
+- "Find processes launched by PowerShell in the last 7 days"
+- "Show me failed sign-in attempts across identities"
+- "Hunt for suspicious email attachments in the last 30 days"
+- "List devices with unsigned process executions"
 
 ### Available tools
 
@@ -132,6 +143,9 @@ The skill references the Fabric RTI MCP tools (`kusto_query`, `kusto_command`, `
 - **`map_update_definition`** - Replace the full JSON definition of an existing Map item
 - **`map_update`** - Partially update properties of an existing Map item
 - **`map_delete`** - Delete a Map item and its associated configuration
+
+#### Advanced Hunting - 1 Tool:
+- **`run_hunting_query`** - Run a KQL advanced hunting query via the Microsoft Graph Security API against Microsoft 365 Defender data (requires `ThreatHunting.Read.All` permission)
 
 ## Getting Started
 

@@ -16,6 +16,7 @@ from fabric_rti_mcp.config import logger
 from fabric_rti_mcp.config.obo import obo_config
 from fabric_rti_mcp.services.activator import activator_tools
 from fabric_rti_mcp.services.eventstream import eventstream_tools
+from fabric_rti_mcp.services.hunting import hunting_tools
 from fabric_rti_mcp.services.kusto import kusto_config, kusto_tools
 from fabric_rti_mcp.services.map import map_tools
 
@@ -41,6 +42,7 @@ def register_tools(mcp: FastMCP) -> None:
     eventstream_tools.register_tools(mcp)
     activator_tools.register_tools(mcp)
     map_tools.register_tools(mcp)
+    hunting_tools.register_tools(mcp)
 
 
 # Health check function defined at module level
