@@ -136,16 +136,21 @@ def run_hunting_query(
 
 
 def get_hunting_schema() -> str:
-    """
-    Retrieves the Advanced Hunting schema from Microsoft 365 Defender.
+    """Retrieves the Advanced Hunting schema available to this tenant.
 
-    Returns a compact summary of all available tables grouped by section,
-    showing table names and column counts. Use get_table_schema(table_name)
-    to get the full column details for a specific table.
+    This returns a compact summary of all available tables grouped by section,
+    showing table names and column counts.
+
+    The schema can include **Microsoft Defender** Advanced Hunting tables (e.g. Devices,
+    Emails, Identity, Alerts) and, when enabled in your environment, **Microsoft Sentinel**
+    tables surfaced via Advanced Hunting (e.g. sections like "Sentinel built-in tables (USX)"
+    and "Sentinel custom logs (CustomLogs)").
+
+    Use get_table_schema(table_name) to get the full column details for a specific table.
 
     IMPORTANT: Call this tool BEFORE writing any hunting query. The schema reveals
     tenant-specific tables (including custom/solution tables like SAP, custom logs, etc.)
-    that cannot be guessed. Use get_table_schema() to inspect column details for query writing.
+    that cannot be guessed.
 
     :return: Markdown-formatted list of tables grouped by section.
     """
