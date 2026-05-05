@@ -45,9 +45,13 @@ class _HuntingSchemaCache:
         cls._schema = None
 
 
+_DEFAULT_MAX_RESULTS = 500
+
+
 def run_hunting_query(
     query: str,
     timespan: str | None = None,
+    max_results: int | None = None,
 ) -> dict[str, Any]:
     """
     Run an advanced hunting query using the Microsoft Graph Security API.
@@ -72,9 +76,13 @@ def run_hunting_query(
         - "P7D" — last 7 days
         - "2024-01-01T00:00:00Z/2024-01-31T23:59:59Z" — specific date range
         - "2024-01-01T00:00:00Z/P30D" — start date and duration
+    :param max_results: Optional maximum number of result rows to return. Default is 500.
+        When the result set exceeds this limit, the response includes a `_truncation_info`
+        field indicating the results were truncated. Set to 0 or None to disable truncation.
     :return: A dictionary containing:
         - schema: List of column definitions (name and type)
         - results: List of result rows as dictionaries
+        - _truncation_info (if truncated): Object with truncated, returned, and message fields
 
     Examples:
 
@@ -102,11 +110,29 @@ def run_hunting_query(
     if timespan:
         payload[_TIMESPAN_FIELD] = timespan
 
-    return GraphHttpClientCache.get_client().make_request(
+    response = GraphHttpClientCache.get_client().make_request(
         "POST",
         _HUNTING_ENDPOINT,
         payload,
     )
+
+    effective_max = max_results if max_results is not None else _DEFAULT_MAX_RESULTS
+    if effective_max and isinstance(response, dict) and "results" in response:
+        results = response["results"]
+        if isinstance(results, list) and len(results) > effective_max:
+            total = len(results)
+            response["results"] = results[:effective_max]
+            response["_truncation_info"] = {
+                "truncated": True,
+                "total_available": total,
+                "returned": effective_max,
+                "message": (
+                    f"Results truncated to {effective_max} rows out of {total} available. "
+                    "For complete results, refine your query with additional filters or increase max_results."
+                ),
+            }
+
+    return response
 
 
 def get_hunting_schema() -> str:

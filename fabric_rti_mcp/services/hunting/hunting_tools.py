@@ -1,7 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from fabric_rti_mcp.services.hunting import hunting_service
+from fabric_rti_mcp.services.hunting import hunting_enrichment, hunting_insights, hunting_service
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -17,5 +17,25 @@ def register_tools(mcp: FastMCP) -> None:
     )
     mcp.add_tool(
         hunting_service.get_table_schema,
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    )
+    mcp.add_tool(
+        hunting_insights.get_device_insights,
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    )
+    mcp.add_tool(
+        hunting_insights.get_user_insights,
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    )
+    mcp.add_tool(
+        hunting_enrichment.analyze_hunting_results,
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    )
+    mcp.add_tool(
+        hunting_enrichment.suggest_hunting_followups,
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    )
+    mcp.add_tool(
+        hunting_enrichment.get_available_hunting_actions,
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
     )
