@@ -1,5 +1,7 @@
 import os
+import re
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fabric_rti_mcp.graph_api_http_client import GraphHttpClientCache
@@ -7,10 +9,12 @@ from fabric_rti_mcp.graph_api_http_client import GraphHttpClientCache
 HUNTING_ENDPOINT = "/security/runHuntingQuery"
 HUNTING_SCHEMA_ENDPOINT = "/security/runHuntingQuery/schema"
 
-# The official Microsoft Graph Security API uses "Query" and "Timespan" as payload keys.
-# Some deployments expect "queryText" instead. Set HUNTING_QUERY_FIELD_NAME to override.
+# Payload field names vary between deployments (Graph vs partner gateways).
+# Allow overriding keys for non-standard deployments.
 _QUERY_FIELD = os.getenv("HUNTING_QUERY_FIELD_NAME", "Query")
-_TIMESPAN_FIELD = "Timespan"
+_TIMESPAN_FIELD = os.getenv("HUNTING_TIMESPAN_FIELD_NAME", "Timespan")
+_START_TIME_FIELD = os.getenv("HUNTING_START_TIME_FIELD_NAME", "startTime")
+_END_TIME_FIELD = os.getenv("HUNTING_END_TIME_FIELD_NAME", "endTime")
 
 # Allow overriding endpoints for non-standard deployments (e.g., partner gateways).
 _HUNTING_ENDPOINT = os.getenv("HUNTING_ENDPOINT", HUNTING_ENDPOINT)
@@ -48,9 +52,47 @@ class _HuntingSchemaCache:
 _DEFAULT_MAX_RESULTS = 500
 
 
+_ISO_DURATION_RE = re.compile(
+    r"^P"
+    r"(?:(?P<days>\d+)D)?"
+    r"(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?)?"
+    r"$"
+)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _format_dt(dt: datetime) -> str:
+    # Graph endpoints typically accept ISO8601 with 'Z'
+    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _parse_iso8601_duration(duration: str) -> timedelta | None:
+    """Parse a limited ISO8601 duration (PnDTnHnMnS) into timedelta.
+
+    Notes:
+    - Does NOT support months/years.
+    - Returns None if the format isn't supported.
+    """
+
+    m = _ISO_DURATION_RE.match(duration)
+    if not m:
+        return None
+
+    parts = {k: int(v) if v else 0 for k, v in m.groupdict().items()}
+    if all(v == 0 for v in parts.values()):
+        return None
+
+    return timedelta(days=parts["days"], hours=parts["hours"], minutes=parts["minutes"], seconds=parts["seconds"])
+
+
 def run_hunting_query(
     query: str,
     timespan: str | None = None,
+    startTime: str | None = None,
+    endTime: str | None = None,
     max_results: int | None = None,
 ) -> dict[str, Any]:
     """
@@ -66,16 +108,27 @@ def run_hunting_query(
     available tables, columns, and their types. Do NOT guess table or column names —
     the schema varies per tenant and may include custom tables (e.g., SAP, custom logs).
 
+    TIP: To discover the output schema of a query before running it fully, append
+    "| getschema" to the query. For example:
+        "DeviceProcessEvents | where InitiatingProcessFileName =~ 'powershell.exe' | getschema"
+    This returns the column names and types of the query result without fetching all rows.
+
     Requires ThreatHunting.Read.All permission.
 
     :param query: The hunting query in Kusto Query Language (KQL).
         Must reference tables from the Microsoft 365 Defender advanced hunting schema.
     :param timespan: Optional time interval in ISO 8601 format. Default is 30 days.
+        Ignored when startTime is provided.
         Examples:
         - "P30D" — last 30 days
         - "P7D" — last 7 days
         - "2024-01-01T00:00:00Z/2024-01-31T23:59:59Z" — specific date range
         - "2024-01-01T00:00:00Z/P30D" — start date and duration
+    :param startTime: Optional start of the query time window in ISO 8601 datetime format
+        (e.g. "2024-01-01T00:00:00Z"). Takes precedence over timespan when provided.
+        If endTime is omitted, the window extends 30 days from startTime.
+    :param endTime: Optional end of the query time window in ISO 8601 datetime format
+        (e.g. "2024-01-31T23:59:59Z"). Only used when startTime is also provided.
     :param max_results: Optional maximum number of result rows to return. Default is 500.
         When the result set exceeds this limit, the response includes a `_truncation_info`
         field indicating the results were truncated. Set to 0 or None to disable truncation.
@@ -104,11 +157,61 @@ def run_hunting_query(
         "| limit 20",
         timespan="P7D"
     )
+
+    # Find sign-ins within a specific date range:
+    run_hunting_query(
+        "IdentityLogonEvents | where ActionType == 'LogonFailed' | limit 20",
+        startTime="2024-01-01T00:00:00Z",
+        endTime="2024-01-31T23:59:59Z"
+    )
+
+    # Look up CVE details (use when a user asks about a specific CVE):
+    run_hunting_query(
+        "DeviceTvmSoftwareVulnerabilitiesKB "
+        "| where CveId == 'CVE-2024-1234' "
+        "| project CveId, CvssScore, EpssScore, IsExploitAvailable, "
+        "VulnerabilitySeverityLevel, PublishedDate, VulnerabilityDescription, AffectedSoftware"
+    )
     """
     payload: dict[str, Any] = {_QUERY_FIELD: query}
 
-    if timespan:
+    # Some backends do not enforce the requested time window unless start/end are supplied.
+    # We therefore prefer sending startTime/endTime when possible, in addition to Timespan.
+    if startTime:
+        payload[_START_TIME_FIELD] = startTime
+        if endTime:
+            payload[_END_TIME_FIELD] = endTime
+            payload[_TIMESPAN_FIELD] = f"{startTime}/{endTime}"
+        else:
+            # Preserve the previous behavior: 30 days from the start
+            payload[_TIMESPAN_FIELD] = f"{startTime}/P30D"
+    elif timespan:
         payload[_TIMESPAN_FIELD] = timespan
+
+        # If timespan is an explicit interval, also provide start/end.
+        if "/" in timespan:
+            start, end = timespan.split("/", 1)
+            payload[_START_TIME_FIELD] = start
+
+            # end can be an ISO datetime or an ISO duration (start/duration)
+            if end.upper().startswith("P"):
+                try:
+                    start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+                except ValueError:
+                    start_dt = None
+                delta = _parse_iso8601_duration(end)
+                if start_dt is not None and delta is not None:
+                    payload[_END_TIME_FIELD] = _format_dt(start_dt + delta)
+            else:
+                payload[_END_TIME_FIELD] = end
+
+        # If a duration is provided, also compute explicit start/end.
+        else:
+            delta = _parse_iso8601_duration(timespan)
+            if delta is not None:
+                now = _utcnow()
+                payload[_START_TIME_FIELD] = _format_dt(now - delta)
+                payload[_END_TIME_FIELD] = _format_dt(now)
 
     response = GraphHttpClientCache.get_client().make_request(
         "POST",

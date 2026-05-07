@@ -418,3 +418,5 @@ dist/
 
 */**/_version.py
 ignore/*
+!Ignore/LOCAL_MCP_SETUP.md
+Ignore/LOCAL_MCP_SETUP.md

@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -42,13 +43,15 @@ def test_run_hunting_query_basic(mock_http_client: MagicMock) -> None:
     )
 
 
-def test_run_hunting_query_with_timespan(mock_http_client: MagicMock) -> None:
+def test_run_hunting_query_with_timespan(mock_http_client: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test hunting query with optional timespan parameter."""
     expected_response: dict[str, Any] = {
         "schema": [{"name": "Timestamp", "type": "DateTime"}],
         "results": [],
     }
     mock_http_client.make_request.return_value = expected_response
+
+    monkeypatch.setattr(hunting_service, "_utcnow", lambda: datetime(2024, 1, 8, tzinfo=timezone.utc))
 
     query = "DeviceProcessEvents | limit 10"
     timespan = "P7D"
@@ -58,7 +61,12 @@ def test_run_hunting_query_with_timespan(mock_http_client: MagicMock) -> None:
     mock_http_client.make_request.assert_called_once_with(
         "POST",
         "/security/runHuntingQuery",
-        {"Query": query, "Timespan": "P7D"},
+        {
+            "Query": query,
+            "Timespan": "P7D",
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-08T00:00:00Z",
+        },
     )
 
 
@@ -74,7 +82,12 @@ def test_run_hunting_query_with_date_range_timespan(mock_http_client: MagicMock)
     mock_http_client.make_request.assert_called_once_with(
         "POST",
         "/security/runHuntingQuery",
-        {"Query": query, "Timespan": timespan},
+        {
+            "Query": query,
+            "Timespan": timespan,
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-31T23:59:59Z",
+        },
     )
 
 
@@ -104,7 +117,7 @@ def test_run_hunting_query_returns_error_response(mock_http_client: MagicMock) -
     assert result == error_response
 
 
-def test_run_hunting_query_complex_kql(mock_http_client: MagicMock) -> None:
+def test_run_hunting_query_complex_kql(mock_http_client: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test with a realistic complex hunting query."""
     mock_http_client.make_request.return_value = {
         "schema": [
@@ -123,13 +136,82 @@ def test_run_hunting_query_complex_kql(mock_http_client: MagicMock) -> None:
         "| order by FailedAttempts desc "
         "| limit 20"
     )
+    monkeypatch.setattr(hunting_service, "_utcnow", lambda: datetime(2024, 1, 8, tzinfo=timezone.utc))
+
     result = hunting_service.run_hunting_query(query, timespan="P7D")
 
     assert result["results"][0]["FailedAttempts"] == 42
     mock_http_client.make_request.assert_called_once_with(
         "POST",
         "/security/runHuntingQuery",
-        {"Query": query, "Timespan": "P7D"},
+        {
+            "Query": query,
+            "Timespan": "P7D",
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-08T00:00:00Z",
+        },
+    )
+
+
+def test_run_hunting_query_with_start_and_end_time(mock_http_client: MagicMock) -> None:
+    """Test that startTime + endTime are combined into a Timespan interval."""
+    mock_http_client.make_request.return_value = {"schema": [], "results": []}
+
+    hunting_service.run_hunting_query(
+        "DeviceProcessEvents | limit 1",
+        startTime="2024-01-01T00:00:00Z",
+        endTime="2024-01-31T23:59:59Z",
+    )
+
+    mock_http_client.make_request.assert_called_once_with(
+        "POST",
+        "/security/runHuntingQuery",
+        {
+            "Query": "DeviceProcessEvents | limit 1",
+            "Timespan": "2024-01-01T00:00:00Z/2024-01-31T23:59:59Z",
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-31T23:59:59Z",
+        },
+    )
+
+
+def test_run_hunting_query_with_start_time_only(mock_http_client: MagicMock) -> None:
+    """Test that startTime alone produces a 30-day window from that start."""
+    mock_http_client.make_request.return_value = {"schema": [], "results": []}
+
+    hunting_service.run_hunting_query("DeviceProcessEvents | limit 1", startTime="2024-01-01T00:00:00Z")
+
+    mock_http_client.make_request.assert_called_once_with(
+        "POST",
+        "/security/runHuntingQuery",
+        {
+            "Query": "DeviceProcessEvents | limit 1",
+            "Timespan": "2024-01-01T00:00:00Z/P30D",
+            "startTime": "2024-01-01T00:00:00Z",
+        },
+    )
+
+
+def test_run_hunting_query_start_time_overrides_timespan(mock_http_client: MagicMock) -> None:
+    """Test that startTime takes precedence over timespan when both are provided."""
+    mock_http_client.make_request.return_value = {"schema": [], "results": []}
+
+    hunting_service.run_hunting_query(
+        "DeviceProcessEvents | limit 1",
+        timespan="P7D",
+        startTime="2024-01-01T00:00:00Z",
+        endTime="2024-01-15T00:00:00Z",
+    )
+
+    mock_http_client.make_request.assert_called_once_with(
+        "POST",
+        "/security/runHuntingQuery",
+        {
+            "Query": "DeviceProcessEvents | limit 1",
+            "Timespan": "2024-01-01T00:00:00Z/2024-01-15T00:00:00Z",
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-15T00:00:00Z",
+        },
     )
 
 
@@ -138,13 +220,20 @@ def test_run_hunting_query_custom_field_name(mock_http_client: MagicMock, monkey
     monkeypatch.setattr(hunting_service, "_QUERY_FIELD", "queryText")
     mock_http_client.make_request.return_value = {"schema": [], "results": []}
 
+    monkeypatch.setattr(hunting_service, "_utcnow", lambda: datetime(2024, 1, 8, tzinfo=timezone.utc))
+
     query = "DeviceProcessEvents | limit 1"
     hunting_service.run_hunting_query(query, timespan="P7D")
 
     mock_http_client.make_request.assert_called_once_with(
         "POST",
         "/security/runHuntingQuery",
-        {"queryText": query, "Timespan": "P7D"},
+        {
+            "queryText": query,
+            "Timespan": "P7D",
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-08T00:00:00Z",
+        },
     )
 
 
