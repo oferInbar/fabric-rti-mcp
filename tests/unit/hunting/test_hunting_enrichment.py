@@ -1,11 +1,9 @@
-import pytest
-
 from fabric_rti_mcp.services.hunting.hunting_enrichment import (
     analyze_hunting_results,
     get_available_hunting_actions,
     suggest_hunting_followups,
+    summarize_hunting_results,
 )
-
 
 # --- analyze_hunting_results ---
 
@@ -182,3 +180,101 @@ class TestGetAvailableHuntingActions:
         actions = get_available_hunting_actions(["DeviceId", "SHA256", "AccountUpn", "NetworkMessageId"])
         entity_types = {a["entity_type"] for a in actions}
         assert entity_types == {"Device", "File", "User", "Email"}
+
+
+# --- Enhanced analyze_hunting_results (new features) ---
+
+
+class TestAnalyzeHuntingResultsEnhanced:
+    def test_timeline_column_priority_ranking(self):
+        """Timestamp should be preferred over other datetime columns."""
+        schema = [
+            {"Name": "CreatedDateTime", "Type": "DateTime"},
+            {"Name": "Timestamp", "Type": "DateTime"},
+            {"Name": "LastSeen", "Type": "DateTime"},
+        ]
+        results = [{"CreatedDateTime": "2024-01-01", "Timestamp": "2024-01-02", "LastSeen": "2024-01-03"}]
+        analysis = analyze_hunting_results(schema, results)
+        assert analysis["timeline_column"] == "Timestamp"
+
+    def test_timeline_column_eventtime_over_lastseen(self):
+        """EventTime should rank higher than LastSeen."""
+        schema = [
+            {"Name": "LastSeen", "Type": "DateTime"},
+            {"Name": "EventTime", "Type": "DateTime"},
+        ]
+        results = [{"LastSeen": "2024-01-01", "EventTime": "2024-01-02"}]
+        analysis = analyze_hunting_results(schema, results)
+        assert analysis["timeline_column"] == "EventTime"
+
+    def test_chart_type_bar_for_entity_plus_aggregate(self):
+        """Entity column + numeric aggregate → bar chart even with high cardinality."""
+        schema = [{"Name": "AccountUpn", "Type": "String"}, {"Name": "FailedAttempts", "Type": "Int64"}]
+        results = [{"AccountUpn": f"user{i}@contoso.com", "FailedAttempts": i} for i in range(50)]
+        analysis = analyze_hunting_results(schema, results)
+        assert analysis["chart_type"] == "bar"
+
+    def test_summary_included(self):
+        """Summary stats should be present in the output."""
+        schema = [{"Name": "DeviceName", "Type": "String"}, {"Name": "Count", "Type": "Int64"}]
+        results = [
+            {"DeviceName": "PC1", "Count": 10},
+            {"DeviceName": "PC1", "Count": 20},
+            {"DeviceName": "PC2", "Count": 5},
+        ]
+        analysis = analyze_hunting_results(schema, results)
+        assert "summary" in analysis
+        assert analysis["summary"]["total_rows"] == 3
+
+    def test_summary_top_entities(self):
+        """Summary should identify top entities."""
+        schema = [{"Name": "DeviceName", "Type": "String"}, {"Name": "Severity", "Type": "String"}]
+        results = [
+            {"DeviceName": "PC1", "Severity": "High"},
+            {"DeviceName": "PC1", "Severity": "Medium"},
+            {"DeviceName": "PC2", "Severity": "Low"},
+        ]
+        analysis = analyze_hunting_results(schema, results)
+        assert "top_entities" in analysis["summary"]
+        assert "DeviceName" in analysis["summary"]["top_entities"]
+        assert analysis["summary"]["top_entities"]["DeviceName"][0] == "PC1"
+
+    def test_summary_anomaly_hint_concentration(self):
+        """Should flag when >80% of rows share a single value."""
+        schema = [{"Name": "RemoteIP", "Type": "String"}]
+        results = [{"RemoteIP": "10.0.0.1"}] * 9 + [{"RemoteIP": "10.0.0.2"}]
+        analysis = analyze_hunting_results(schema, results)
+        assert "anomaly_hints" in analysis["summary"]
+        assert any("10.0.0.1" in hint for hint in analysis["summary"]["anomaly_hints"])
+
+    def test_summary_time_range(self):
+        """Summary should include time range when datetime column exists."""
+        schema = [{"Name": "Timestamp", "Type": "DateTime"}, {"Name": "Value", "Type": "Int64"}]
+        results = [
+            {"Timestamp": "2024-01-01T00:00:00Z", "Value": 1},
+            {"Timestamp": "2024-01-05T00:00:00Z", "Value": 2},
+        ]
+        analysis = analyze_hunting_results(schema, results)
+        assert "time_range" in analysis["summary"]
+        assert analysis["summary"]["time_range"]["min"] == "2024-01-01T00:00:00Z"
+        assert analysis["summary"]["time_range"]["max"] == "2024-01-05T00:00:00Z"
+
+
+# --- summarize_hunting_results ---
+
+
+class TestSummarizeHuntingResults:
+    def test_returns_unavailable_without_context(self):
+        """Should gracefully handle missing context."""
+        import asyncio
+
+        result = asyncio.run(
+            summarize_hunting_results(
+                query="DeviceProcessEvents | limit 10",
+                schema=[{"Name": "Timestamp", "Type": "DateTime"}],
+                results=[{"Timestamp": "2024-01-01"}],
+                ctx=None,
+            )
+        )
+        assert result["source"] == "unavailable"
+        assert result["summary_bullets"] == []

@@ -327,3 +327,39 @@ def get_table_schema(table_name: str) -> str:
         lines.append(f"  {name}: {col_type}{entity_part}{desc_part}")
 
     return "\n".join(lines)
+
+
+def validate_hunting_query(query: str) -> dict[str, Any]:
+    """
+    Validates a KQL query against Advanced Hunting without returning full results.
+
+    Appends '| getschema' to the query and executes it. The engine validates syntax
+    and semantics (table/column existence) but only returns the output column schema,
+    not the actual data rows. This is significantly cheaper than a full execution.
+
+    Use this tool to verify a query is correct BEFORE running it with run_hunting_query.
+    This is especially useful in agentic loops where LLM-generated KQL may contain errors.
+
+    :param query: The KQL query to validate.
+    :return: A dictionary with:
+        - valid (bool): Whether the query is syntactically and semantically correct.
+        - output_schema (list): If valid, the list of output columns with Name and Type.
+            Each entry has 'ColumnName', 'ColumnOrdinal', 'DataType', and 'ColumnType'.
+        - error (str): If invalid, the error message from the engine.
+    """
+    cleaned = query.strip().rstrip(";").strip()
+    validation_query = f"({cleaned}) | getschema"
+
+    try:
+        result = run_hunting_query(validation_query, max_results=0)
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
+
+    if isinstance(result, dict):
+        if "error" in result:
+            return {"valid": False, "error": result["error"]}
+        if result.get("ErrorCode"):
+            return {"valid": False, "error": result.get("ErrorMessage", str(result.get("ErrorCode")))}
+
+    schema_rows = result.get("results", []) if isinstance(result, dict) else []
+    return {"valid": True, "output_schema": schema_rows}

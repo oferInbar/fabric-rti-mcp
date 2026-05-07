@@ -1,5 +1,9 @@
+import json
 import re
 from typing import Any
+
+from mcp.server.fastmcp import Context
+from mcp.types import SamplingMessage, TextContent
 
 # ---------------------------------------------------------------------------
 # Static mappings
@@ -139,6 +143,30 @@ _ACTION_MAPPINGS: list[dict[str, Any]] = [
 # Table name extraction pattern — matches the first bare identifier before a pipe or whitespace.
 _TABLE_NAME_RE = re.compile(r"^\s*(\w+)\s*(?:\||$)", re.MULTILINE)
 
+# Priority-ranked datetime column names (higher index = lower priority).
+_DATETIME_PRIORITY = [
+    "Timestamp",
+    "EventTime",
+    "TimeGenerated",
+    "ActivityDateTime",
+    "CreatedDateTime",
+    "StartTime",
+    "EndTime",
+    "LastSeen",
+    "FirstSeen",
+]
+
+# Column name patterns indicating entity/categorical columns (suitable for bar charts).
+_ENTITY_COLUMN_PATTERNS = re.compile(
+    r"(AccountUpn|AccountName|DeviceName|DeviceId|FileName|RemoteIP|"
+    r"SenderFromAddress|RecipientEmailAddress|InitiatingProcessFileName|"
+    r"ActionType|Category|Severity|LogonType|Application)",
+    re.IGNORECASE,
+)
+
+# Column name patterns indicating numeric/aggregate columns.
+_NUMERIC_COLUMN_PATTERNS = re.compile(r"(Count|Total|Sum|Avg|Rate|Percentage|Score|Attempts|Duration)", re.IGNORECASE)
+
 
 def _is_datetime_type(type_str: str) -> bool:
     return "datetime" in type_str.lower()
@@ -147,6 +175,61 @@ def _is_datetime_type(type_str: str) -> bool:
 def _is_numeric_type(type_str: str) -> bool:
     lower = type_str.lower()
     return any(t in lower for t in ("int", "long", "real", "double", "decimal"))
+
+
+def _rank_datetime_column(name: str) -> int:
+    """Lower rank = higher priority for timeline visualization."""
+    try:
+        return _DATETIME_PRIORITY.index(name)
+    except ValueError:
+        return len(_DATETIME_PRIORITY)
+
+
+def _compute_summary_stats(
+    results: list[dict[str, Any]], col_types: dict[str, str], column_stats: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """Compute structured summary statistics for the result set."""
+    summary: dict[str, Any] = {"total_rows": len(results)}
+
+    # Time range
+    for col_name, col_type in col_types.items():
+        if _is_datetime_type(col_type) and col_name in column_stats:
+            stats = column_stats[col_name]
+            if "min" in stats and "max" in stats:
+                summary["time_range"] = {"column": col_name, "min": stats["min"], "max": stats["max"]}
+                break
+
+    # Top entities: find low-cardinality entity columns and their top values
+    top_entities: dict[str, list[str]] = {}
+    for col_name in col_types:
+        if not _ENTITY_COLUMN_PATTERNS.search(col_name):
+            continue
+        stats = column_stats.get(col_name, {})
+        distinct = stats.get("distinct_count", 0)
+        if 1 <= distinct <= 50:
+            values = [row.get(col_name) for row in results if row.get(col_name) is not None]
+            # Count occurrences and take top 5
+            counts: dict[str, int] = {}
+            for v in values:
+                sv = str(v)
+                counts[sv] = counts.get(sv, 0) + 1
+            top = sorted(counts.keys(), key=lambda k: counts[k], reverse=True)[:5]
+            top_entities[col_name] = top
+    if top_entities:
+        summary["top_entities"] = top_entities
+
+    # Concentration hints: flag if >80% of rows share a single value in any entity column
+    anomaly_hints: list[str] = []
+    for col_name, top_vals in top_entities.items():
+        if top_vals:
+            top_val = top_vals[0]
+            count = sum(1 for row in results if str(row.get(col_name, "")) == top_val)
+            if len(results) > 2 and count / len(results) > 0.8:
+                anomaly_hints.append(f"{count}/{len(results)} rows have {col_name}='{top_val}'")
+    if anomaly_hints:
+        summary["anomaly_hints"] = anomaly_hints
+
+    return summary
 
 
 # ---------------------------------------------------------------------------
@@ -166,10 +249,11 @@ def analyze_hunting_results(
     - Suggests appropriate chart type based on data shape
     - Computes column statistics (cardinality, min/max for dates/numbers)
     - Generates filter suggestions (columns with low-to-medium cardinality and their top values)
+    - Produces structured summary stats (top entities, time range, anomaly hints)
 
     :param schema: List of column definitions from the query result, each with 'Name' and 'Type'.
     :param results: List of result row dictionaries.
-    :return: Dictionary with timeline_column, chart_type, column_stats, filter_suggestions.
+    :return: Dictionary with timeline_column, chart_type, column_stats, filter_suggestions, summary.
     """
     datetime_cols: list[str] = []
     numeric_cols: list[str] = []
@@ -184,12 +268,10 @@ def analyze_hunting_results(
         if _is_numeric_type(col_type):
             numeric_cols.append(name)
 
-    # Timeline column: prefer "Timestamp" if present, else first datetime column.
+    # Timeline column: rank by known priority, then fallback to first datetime.
     timeline_column: str | None = None
-    if "Timestamp" in datetime_cols:
-        timeline_column = "Timestamp"
-    elif datetime_cols:
-        timeline_column = datetime_cols[0]
+    if datetime_cols:
+        timeline_column = min(datetime_cols, key=_rank_datetime_column)
 
     # Column statistics
     column_stats: dict[str, dict[str, Any]] = {}
@@ -216,14 +298,20 @@ def analyze_hunting_results(
 
         column_stats[name] = stats
 
-    # Chart type heuristic
+    # Chart type heuristic (enhanced with column-name semantics)
     chart_type = "table"
+    has_entity_col = any(_ENTITY_COLUMN_PATTERNS.search(c) for c in col_types)
+    has_aggregate_col = any(_NUMERIC_COLUMN_PATTERNS.search(c) for c in col_types if _is_numeric_type(col_types[c]))
+
     if len(results) == 1:
         chart_type = "card"
     elif timeline_column and numeric_cols:
         chart_type = "line"
+    elif has_entity_col and has_aggregate_col:
+        # Entity + aggregate pattern (e.g., AccountUpn + FailedAttempts) → bar chart
+        chart_type = "bar"
     elif any(
-        1 < column_stats.get(c, {}).get("distinct_count", 0) <= 20
+        1 < column_stats.get(c, {}).get("distinct_count", 0) <= 30
         for c in col_types
         if not _is_datetime_type(col_types[c]) and not _is_numeric_type(col_types[c])
     ):
@@ -239,11 +327,15 @@ def analyze_hunting_results(
             values = sorted({str(row.get(name)) for row in results if row.get(name) is not None})[:10]
             filter_suggestions.append({"column": name, "distinct_count": distinct_count, "sample_values": values})
 
+    # Structured summary
+    summary = _compute_summary_stats(results, col_types, column_stats)
+
     return {
         "timeline_column": timeline_column,
         "chart_type": chart_type,
         "column_stats": column_stats,
         "filter_suggestions": filter_suggestions,
+        "summary": summary,
     }
 
 
@@ -311,3 +403,93 @@ def get_available_hunting_actions(
                 break
 
     return actions
+
+
+_SUMMARIZE_SYSTEM_PROMPT = (
+    "You are a security analyst. Given hunting query results, produce a concise JSON response with:\n"
+    '- "summary_bullets": 2-4 key findings as short sentences (focus on what matters for security)\n'
+    '- "recommended_chart": the best chart type for this data ("line", "bar", "pie", "table", or "card")\n'
+    '- "grouping_column": the best column to group/visualize by\n'
+    "Respond ONLY with valid JSON, no markdown."
+)
+
+_MAX_RESULTS_FOR_SUMMARY = 30
+_MAX_SUMMARY_TOKENS = 400
+
+
+async def summarize_hunting_results(
+    query: str,
+    schema: list[dict[str, str]],
+    results: list[dict[str, Any]],
+    user_prompt: str | None = None,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """
+    Generates natural language summarization of hunting query results using the client LLM.
+
+    Uses MCP sampling to request the connected client's language model to analyze the results
+    and produce human-readable findings. This is complementary to analyze_hunting_results which
+    provides deterministic statistics — this tool adds semantic understanding.
+
+    Requires the MCP client to support sampling (createMessage). If sampling is unavailable,
+    returns a fallback response indicating the feature is not supported.
+
+    :param query: The original KQL query that produced the results.
+    :param schema: List of column definitions from the query result, each with 'Name' and 'Type'.
+    :param results: List of result row dictionaries (first 30 rows are used).
+    :param user_prompt: Optional original user question for context.
+    :param ctx: MCP Context (auto-injected by FastMCP).
+    :return: Dictionary with:
+        - summary_bullets (list[str]): Key findings in natural language.
+        - recommended_chart (str): Semantically appropriate chart type.
+        - grouping_column (str | None): Best column for visualization grouping.
+        - source (str): "llm" if produced by sampling, "unavailable" if sampling failed.
+    """
+    if ctx is None:
+        return _fallback_response("No MCP context available for sampling")
+
+    # Truncate results for token efficiency
+    truncated = results[:_MAX_RESULTS_FOR_SUMMARY]
+    schema_summary = ", ".join(f"{c.get('Name', '')}:{c.get('Type', '')}" for c in schema)
+
+    user_content = f"Query: {query}\nSchema: {schema_summary}\nResults ({len(truncated)} of {len(results)} rows):\n"
+    user_content += json.dumps(truncated, default=str)
+    if user_prompt:
+        user_content = f"User question: {user_prompt}\n\n{user_content}"
+
+    try:
+        response = await ctx.session.create_message(
+            messages=[SamplingMessage(role="user", content=TextContent(type="text", text=user_content))],
+            max_tokens=_MAX_SUMMARY_TOKENS,
+            system_prompt=_SUMMARIZE_SYSTEM_PROMPT,
+        )
+
+        # Parse the LLM response
+        text = response.content.text if hasattr(response.content, "text") else str(response.content)
+        parsed = json.loads(text)
+        return {
+            "summary_bullets": parsed.get("summary_bullets", []),
+            "recommended_chart": parsed.get("recommended_chart", "table"),
+            "grouping_column": parsed.get("grouping_column"),
+            "source": "llm",
+        }
+    except json.JSONDecodeError:
+        # LLM returned non-JSON; use raw text as a single bullet
+        return {
+            "summary_bullets": [text.strip()] if text else [],
+            "recommended_chart": "table",
+            "grouping_column": None,
+            "source": "llm",
+        }
+    except Exception as e:
+        return _fallback_response(f"Sampling not supported or failed: {e}")
+
+
+def _fallback_response(reason: str) -> dict[str, Any]:
+    return {
+        "summary_bullets": [],
+        "recommended_chart": None,
+        "grouping_column": None,
+        "source": "unavailable",
+        "reason": reason,
+    }

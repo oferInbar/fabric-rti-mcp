@@ -39,3 +39,11 @@ def register_tools(mcp: FastMCP) -> None:
         hunting_enrichment.get_available_hunting_actions,
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
     )
+    mcp.add_tool(
+        hunting_service.validate_hunting_query,
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    )
+    mcp.add_tool(
+        hunting_enrichment.summarize_hunting_results,
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    )

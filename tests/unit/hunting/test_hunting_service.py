@@ -366,3 +366,84 @@ def test_schema_cache_reuses_result(mock_http_client: MagicMock) -> None:
 
     # API called only once
     mock_http_client.make_request.assert_called_once_with("GET", hunting_service._SCHEMA_ENDPOINT)
+
+
+class TestValidateHuntingQuery:
+    """Tests for validate_hunting_query."""
+
+    def test_valid_query_returns_schema(self, mock_http_client: MagicMock) -> None:
+        """Test that a valid query returns the output schema from getschema."""
+        getschema_response: dict[str, Any] = {
+            "schema": [
+                {"name": "ColumnName", "type": "String"},
+                {"name": "ColumnOrdinal", "type": "Int32"},
+                {"name": "DataType", "type": "String"},
+                {"name": "ColumnType", "type": "String"},
+            ],
+            "results": [
+                {
+                    "ColumnName": "Timestamp",
+                    "ColumnOrdinal": 0,
+                    "DataType": "System.DateTime",
+                    "ColumnType": "datetime",
+                },
+                {"ColumnName": "DeviceId", "ColumnOrdinal": 1, "DataType": "System.String", "ColumnType": "string"},
+            ],
+        }
+        mock_http_client.make_request.return_value = getschema_response
+
+        result = hunting_service.validate_hunting_query("DeviceProcessEvents | where FileName == 'cmd.exe' | limit 10")
+
+        assert result["valid"] is True
+        assert len(result["output_schema"]) == 2
+        assert result["output_schema"][0]["ColumnName"] == "Timestamp"
+
+        # Verify getschema was appended
+        call_args = mock_http_client.make_request.call_args
+        payload = call_args[0][2]
+        assert "| getschema" in payload["Query"]
+
+    def test_invalid_query_returns_error(self, mock_http_client: MagicMock) -> None:
+        """Test that an invalid query returns valid=False with error details."""
+        error_response: dict[str, Any] = {
+            "error": True,
+            "status_code": 400,
+            "detail": "Semantic error: 'NonExistentTable' is not a recognized table",
+        }
+        mock_http_client.make_request.return_value = error_response
+
+        result = hunting_service.validate_hunting_query("NonExistentTable | limit 10")
+
+        assert result["valid"] is False
+        assert "error" in result
+
+    def test_query_with_error_code(self, mock_http_client: MagicMock) -> None:
+        """Test that ErrorCode in response is treated as invalid."""
+        mock_http_client.make_request.return_value = {
+            "ErrorCode": "BadRequest",
+            "ErrorMessage": "Query syntax error near position 5",
+        }
+
+        result = hunting_service.validate_hunting_query("SELEC * FROM table")
+
+        assert result["valid"] is False
+        assert "syntax error" in result["error"]
+
+    def test_exception_during_execution(self, mock_http_client: MagicMock) -> None:
+        """Test that exceptions are caught and returned as invalid."""
+        mock_http_client.make_request.side_effect = RuntimeError("Connection timeout")
+
+        result = hunting_service.validate_hunting_query("DeviceProcessEvents | limit 1")
+
+        assert result["valid"] is False
+        assert "Connection timeout" in result["error"]
+
+    def test_strips_trailing_semicolon(self, mock_http_client: MagicMock) -> None:
+        """Test that trailing semicolons are stripped before appending getschema."""
+        mock_http_client.make_request.return_value = {"schema": [], "results": []}
+
+        hunting_service.validate_hunting_query("DeviceProcessEvents | limit 1;")
+
+        call_args = mock_http_client.make_request.call_args
+        payload = call_args[0][2]
+        assert payload["Query"] == "(DeviceProcessEvents | limit 1) | getschema"
