@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from fabric_rti_mcp.services.kusto.kusto_service import (
@@ -7,8 +9,6 @@ from fabric_rti_mcp.services.kusto.kusto_service import (
     kusto_command,
     kusto_query,
 )
-
-from unittest.mock import MagicMock, patch
 
 
 class TestKqlEscapeEntityName:

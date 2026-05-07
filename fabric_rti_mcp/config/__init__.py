@@ -38,6 +38,13 @@ DEFAULT_FABRIC_RTI_AI_FOUNDRY_COMPATIBILITY_SCHEMA = False
 DEFAULT_FABRIC_RTI_CORS_ORIGINS = "*"
 
 
+AH_MODE_ADVANCED_HUNTING = "AdvancedHunting"
+AH_MODE_VIBE_HUNTING = "VibeHunting"
+_VALID_AH_MODES = {"", AH_MODE_ADVANCED_HUNTING, AH_MODE_VIBE_HUNTING}
+# Legacy boolean values map to VibeHunting for backward compatibility
+_LEGACY_TRUE_VALUES = {"true", "1"}
+
+
 @dataclass(slots=True, frozen=True)
 class GlobalFabricRTIConfig:
     fabric_api_base: str
@@ -50,8 +57,23 @@ class GlobalFabricRTIConfig:
     use_obo_flow: bool
     use_ai_foundry_compat: bool
     cors_allowed_origins: str
-    ah_mode: bool
+    ah_mode: str
     instructions: str | None
+
+    @staticmethod
+    def _parse_ah_mode(value: str) -> str:
+        """Parse AH_MODE value, supporting legacy bool and new enum values."""
+        stripped = value.strip()
+        if stripped.lower() in _LEGACY_TRUE_VALUES:
+            return AH_MODE_VIBE_HUNTING
+        if stripped in _VALID_AH_MODES:
+            return stripped
+        # Case-insensitive match
+        for valid in _VALID_AH_MODES:
+            if stripped.lower() == valid.lower():
+                return valid
+        logger.warning(f"Unknown AH_MODE value '{stripped}', defaulting to empty (disabled)")
+        return ""
 
     @staticmethod
     def from_env() -> GlobalFabricRTIConfig:
@@ -77,7 +99,7 @@ class GlobalFabricRTIConfig:
             cors_allowed_origins=os.getenv(
                 GlobalFabricRTIEnvVarNames.cors_allowed_origins, DEFAULT_FABRIC_RTI_CORS_ORIGINS
             ),
-            ah_mode=os.getenv(GlobalFabricRTIEnvVarNames.ah_mode, "false").lower() in ("true", "1"),
+            ah_mode=GlobalFabricRTIConfig._parse_ah_mode(os.getenv(GlobalFabricRTIEnvVarNames.ah_mode, "")),
             instructions=os.getenv(GlobalFabricRTIEnvVarNames.instructions, None),
         )
 

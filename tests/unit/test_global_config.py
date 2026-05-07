@@ -117,3 +117,46 @@ class TestWithArgsCLIOverride:
             assert config.stateless_http is True
         finally:
             sys.argv = original_argv
+
+
+class TestAhModeParsing:
+    """Tests for the AH_MODE string enum parsing."""
+
+    def test_empty_string_means_disabled(self) -> None:
+        assert GlobalFabricRTIConfig._parse_ah_mode("") == ""
+
+    def test_advanced_hunting_value(self) -> None:
+        assert GlobalFabricRTIConfig._parse_ah_mode("AdvancedHunting") == "AdvancedHunting"
+
+    def test_vibe_hunting_value(self) -> None:
+        assert GlobalFabricRTIConfig._parse_ah_mode("VibeHunting") == "VibeHunting"
+
+    def test_case_insensitive(self) -> None:
+        assert GlobalFabricRTIConfig._parse_ah_mode("advancedhunting") == "AdvancedHunting"
+        assert GlobalFabricRTIConfig._parse_ah_mode("VIBEHUNTING") == "VibeHunting"
+
+    def test_legacy_true_maps_to_vibe_hunting(self) -> None:
+        assert GlobalFabricRTIConfig._parse_ah_mode("true") == "VibeHunting"
+        assert GlobalFabricRTIConfig._parse_ah_mode("True") == "VibeHunting"
+        assert GlobalFabricRTIConfig._parse_ah_mode("1") == "VibeHunting"
+
+    def test_unknown_value_defaults_to_empty(self) -> None:
+        assert GlobalFabricRTIConfig._parse_ah_mode("InvalidMode") == ""
+
+    @patch.dict("os.environ", {"AH_MODE": "AdvancedHunting"}, clear=False)
+    def test_from_env_advanced_hunting(self) -> None:
+        config = GlobalFabricRTIConfig.from_env()
+        assert config.ah_mode == "AdvancedHunting"
+
+    @patch.dict("os.environ", {"AH_MODE": "true"}, clear=False)
+    def test_from_env_legacy_true(self) -> None:
+        config = GlobalFabricRTIConfig.from_env()
+        assert config.ah_mode == "VibeHunting"
+
+    @patch.dict("os.environ", {}, clear=False)
+    def test_from_env_unset_defaults_empty(self) -> None:
+        import os
+
+        os.environ.pop("AH_MODE", None)
+        config = GlobalFabricRTIConfig.from_env()
+        assert config.ah_mode == ""

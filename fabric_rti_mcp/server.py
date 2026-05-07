@@ -11,8 +11,8 @@ from starlette.responses import JSONResponse
 from fabric_rti_mcp import __version__
 from fabric_rti_mcp.authentication.auth_middleware import add_auth_middleware
 from fabric_rti_mcp.compat.ms_foundry import SchemaCompatibleMCP
+from fabric_rti_mcp.config import AH_MODE_ADVANCED_HUNTING, AH_MODE_VIBE_HUNTING, logger
 from fabric_rti_mcp.config import global_config as config
-from fabric_rti_mcp.config import logger
 from fabric_rti_mcp.config.obo import obo_config
 from fabric_rti_mcp.services.activator import activator_tools
 from fabric_rti_mcp.services.eventstream import eventstream_tools
@@ -44,14 +44,29 @@ AH_MODE_INSTRUCTIONS = (
     "Queries use Kusto Query Language (KQL) syntax."
 )
 
+VIBE_HUNTING_INSTRUCTIONS = (
+    AH_MODE_INSTRUCTIONS + " "
+    "Additional tools are available for enrichment: use get_device_insights and get_user_insights "
+    "to enrich entities found in results, analyze_hunting_results for visualization metadata, "
+    "suggest_hunting_followups for pivot suggestions, get_available_hunting_actions for response actions, "
+    "and summarize_hunting_results for natural language summaries of findings."
+)
+
 
 def register_tools(mcp: FastMCP) -> None:
-    """Register tools with the MCP server based on the configured mode."""
-    if config.ah_mode:
-        logger.info("AH_MODE enabled — registering only Advanced Hunting tools")
-        hunting_tools.register_tools(mcp)
+    """Register tools with the MCP server based on the configured AH_MODE."""
+    if config.ah_mode == AH_MODE_ADVANCED_HUNTING:
+        logger.info("AH_MODE=AdvancedHunting — registering core hunting tools only")
+        hunting_tools.register_core_tools(mcp)
         return
 
+    if config.ah_mode == AH_MODE_VIBE_HUNTING:
+        logger.info("AH_MODE=VibeHunting — registering all hunting tools (core + enrichment)")
+        hunting_tools.register_core_tools(mcp)
+        hunting_tools.register_enrichment_tools(mcp)
+        return
+
+    # Default: full mode (all services)
     logger.info("Kusto configuration keys found in environment:")
     logger.info(", ".join(kusto_config.KustoConfig.existing_env_vars()))
 
@@ -119,7 +134,9 @@ def main() -> None:
         fastmcp_class = SchemaCompatibleMCP if config.use_ai_foundry_compat else FastMCP
 
         instructions = config.instructions
-        if not instructions and config.ah_mode:
+        if not instructions and config.ah_mode == AH_MODE_VIBE_HUNTING:
+            instructions = VIBE_HUNTING_INSTRUCTIONS
+        elif not instructions and config.ah_mode == AH_MODE_ADVANCED_HUNTING:
             instructions = AH_MODE_INSTRUCTIONS
 
         if config.transport == "http":
