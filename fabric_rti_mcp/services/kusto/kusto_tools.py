@@ -2,6 +2,8 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from fabric_rti_mcp.services.kusto import kusto_service
+from fabric_rti_mcp.services.kusto.kusto_service import CONFIG
+from fabric_rti_mcp.services.kusto.shots_table_ref import ShotsTableRef
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -43,6 +45,11 @@ def register_tools(mcp: FastMCP) -> None:
     )
     mcp.add_tool(
         kusto_service.kusto_get_shots,
+        description=ShotsTableRef.build_tool_description(
+            CONFIG.shots_table,
+            embedding_configured=bool(CONFIG.open_ai_embedding_endpoint),
+            has_default_cluster=bool(CONFIG.default_service),
+        ),
         annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False),
     )
     mcp.add_tool(

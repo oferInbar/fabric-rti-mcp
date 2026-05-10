@@ -840,7 +840,7 @@ def kusto_ingest_inline_into_table(
 
 def kusto_get_shots(
     prompt: str,
-    cluster_uri: str,
+    cluster_uri: str | None = None,
     shots_table_name: str | None = None,
     sample_size: int = 3,
     database: str | None = None,
@@ -849,46 +849,45 @@ def kusto_get_shots(
 ) -> dict[str, Any]:
     """
     Retrieves KQL query examples that semantically resemble the user's prompt.
-
-    IMPORTANT: Call this tool BEFORE writing any KQL query. The returned shots contain
-    expert-written KQL examples that reveal the correct databases, tables, column names,
-    and query patterns for this cluster. Without this context, you are likely to query
-    the wrong table or database.
-
-    Use this to:
-    - Discover which databases and tables contain the data you need
-    - Learn the correct column names and schema for a given domain
-    - Find proven query patterns as starting points
-
-    The returned shots come from a curated collection of expert-written examples
-    paired with natural language descriptions.
+    The tool description is dynamically generated at startup by _build_get_shots_description.
 
     :param prompt: The user prompt to find similar shots for.
-    :param shots_table_name: Name of the table containing the shots. The table should have "EmbeddingText" (string)
-                             column containing the natural language prompt, "AugmentedText" (string) column containing
-                             the respective KQL, and "EmbeddingVector" (dynamic) column containing the embedding vector
-                             for the NL.
-                             If not provided, uses the KUSTO_SHOTS_TABLE environment variable.
-    :param cluster_uri: The URI of the Kusto cluster.
+    :param cluster_uri: The URI of the Kusto cluster hosting the shots table.
+    :param shots_table_name: Name of the table containing the shots.
     :param sample_size: Number of most similar shots to retrieve. Defaults to 3.
-    :param database: Optional database name. If not provided, uses the "AI" database or the default database.
-    :param embedding_endpoint: Optional endpoint for the embedding model to use. If not provided, uses the
-                             AZ_OPENAI_EMBEDDING_ENDPOINT environment variable. If no valid endpoint is set,
-                             this function should not be called.
+    :param database: Optional database name.
+    :param embedding_endpoint: Optional endpoint for the embedding model.
     :param client_request_properties: Optional dictionary of additional client request properties.
     :return: List of dictionaries containing the shots records.
     """
-    resolved_table = shots_table_name or CONFIG.shots_table
+    if sample_size < 1:
+        raise ValueError("sample_size must be >= 1.")
+
+    configured_shots_ref = CONFIG.shots_table
+    resolved_table = shots_table_name or (configured_shots_ref.table_name if configured_shots_ref else None)
     if not resolved_table:
         raise ValueError(
             "shots_table_name must be provided either as a parameter or via the KUSTO_SHOTS_TABLE environment variable."
         )
 
+    resolved_cluster = (
+        cluster_uri
+        or (configured_shots_ref.cluster_uri if configured_shots_ref else None)
+        or (CONFIG.default_service.service_uri if CONFIG.default_service else None)
+    )
+    if not resolved_cluster:
+        raise ValueError(
+            "cluster_uri must be provided either as a parameter or via a fully-qualified KUSTO_SHOTS_TABLE "
+            "(e.g. cluster('host').database('db').Table)."
+        )
+
+    resolved_database = database or (configured_shots_ref.database if configured_shots_ref else None)
+
     # Use provided endpoint, or fall back to environment variable, or use default
-    endpoint = embedding_endpoint or CONFIG.open_ai_embedding_endpoint
+    resolved_embedding_endpoint = embedding_endpoint or CONFIG.open_ai_embedding_endpoint
 
     kql_query = f"""
-        let model_endpoint = '{kql_escape_string(endpoint or "")}';
+        let model_endpoint = '{kql_escape_string(resolved_embedding_endpoint or "")}';
         let embedded_term = toscalar(evaluate ai_embeddings('{kql_escape_string(prompt)}', model_endpoint));
         {kql_escape_entity_name(resolved_table)}
         | extend similarity = series_cosine_similarity(embedded_term, EmbeddingVector)
@@ -896,7 +895,9 @@ def kusto_get_shots(
         | project similarity, EmbeddingText, AugmentedText
     """
 
-    return _execute(kql_query, cluster_uri, database=database, client_request_properties=client_request_properties)
+    return _execute(
+        kql_query, resolved_cluster, database=resolved_database, client_request_properties=client_request_properties
+    )
 
 
 def _rows_to_dicts(result: dict[str, Any]) -> list[dict[str, Any]]:

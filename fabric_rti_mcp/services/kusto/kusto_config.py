@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from azure.kusto.data import KustoConnectionStringBuilder
 
 from fabric_rti_mcp.config import logger
+from fabric_rti_mcp.services.kusto.shots_table_ref import ShotsTableRef
 
 
 @dataclass(slots=True, frozen=True)
@@ -51,8 +52,9 @@ class KustoConfig:
     default_service: KustoServiceConfig | None = None
     # Optional OpenAI embedding endpoint to be used for embeddings where applicable.
     open_ai_embedding_endpoint: str | None = None
-    # Default shots table name for the kusto_get_shots tool.
-    shots_table: str | None = None
+    # Parsed shots table reference for the kusto_get_shots tool.
+    # Supports plain table name or FQN: cluster('...').database('...').TableName
+    shots_table: ShotsTableRef | None = None
     # List of known Kusto services. If empty, no services are configured.
     known_services: list[KustoServiceConfig] | None = None
     # Whether to eagerly connect to the default service on startup.
@@ -82,7 +84,8 @@ class KustoConfig:
             )
 
         open_ai_embedding_endpoint = os.getenv(KustoEnvVarNames.open_ai_embedding_endpoint, None)
-        shots_table = os.getenv(KustoEnvVarNames.shots_table, None)
+        shots_table_raw = os.getenv(KustoEnvVarNames.shots_table, None)
+        shots_table = ShotsTableRef.parse(shots_table_raw) if shots_table_raw else None
         known_services_string = os.getenv(KustoEnvVarNames.known_services, None)
         known_services: list[KustoServiceConfig] | None = None
         eager_connect = os.getenv(KustoEnvVarNames.eager_connect, "false").lower() in ("true", "1")
