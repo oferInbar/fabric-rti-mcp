@@ -348,16 +348,31 @@ def validate_hunting_query(query: str) -> dict[str, Any]:
         - error (str): If invalid, the error message from the engine.
     """
     cleaned = query.strip().rstrip(";").strip()
-    validation_query = f"({cleaned}) | getschema"
+
+    # `let` statements must remain at the top level — wrapping them in parentheses
+    # is a KQL syntax error.  For queries that contain `let`, we append `| getschema`
+    # to the final expression instead of wrapping the whole thing.
+    _LET_RE = re.compile(r"(?:^|\n)\s*let\s+", re.IGNORECASE)
+    validation_query = f"{cleaned}\n| getschema" if _LET_RE.search(cleaned) else f"({cleaned}) | getschema"
 
     try:
-        result = run_hunting_query(validation_query, max_results=0)
+        result = run_hunting_query(validation_query, timespan="P1D", max_results=0)
     except Exception as e:
         return {"valid": False, "error": str(e)}
 
     if isinstance(result, dict):
         if "error" in result:
-            return {"valid": False, "error": result["error"]}
+            error_val = result["error"]
+            # The Graph API may return the error as a nested dict, a string, or
+            # a plain boolean flag.  Always surface a human-readable message.
+            if isinstance(error_val, dict):
+                error_msg = error_val.get("message") or error_val.get("Message") or str(error_val)
+            elif isinstance(error_val, str):
+                error_msg = error_val
+            else:
+                # Boolean or other non-string sentinel — fall back to adjacent detail fields.
+                error_msg = result.get("detail") or result.get("message") or str(error_val)
+            return {"valid": False, "error": error_msg}
         if result.get("ErrorCode"):
             return {"valid": False, "error": result.get("ErrorMessage", str(result.get("ErrorCode")))}
 

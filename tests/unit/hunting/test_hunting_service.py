@@ -398,13 +398,15 @@ class TestValidateHuntingQuery:
         assert len(result["output_schema"]) == 2
         assert result["output_schema"][0]["ColumnName"] == "Timestamp"
 
-        # Verify getschema was appended
+        # Verify getschema was appended and P1D timespan is sent to reduce throttling
         call_args = mock_http_client.make_request.call_args
         payload = call_args[0][2]
         assert "| getschema" in payload["Query"]
+        assert "Timespan" in payload
+        assert payload["Timespan"] == "P1D"
 
     def test_invalid_query_returns_error(self, mock_http_client: MagicMock) -> None:
-        """Test that an invalid query returns valid=False with error details."""
+        """Test that an invalid query returns valid=False with a human-readable error string."""
         error_response: dict[str, Any] = {
             "error": True,
             "status_code": 400,
@@ -415,7 +417,8 @@ class TestValidateHuntingQuery:
         result = hunting_service.validate_hunting_query("NonExistentTable | limit 10")
 
         assert result["valid"] is False
-        assert "error" in result
+        assert isinstance(result["error"], str)
+        assert "NonExistentTable" in result["error"]
 
     def test_query_with_error_code(self, mock_http_client: MagicMock) -> None:
         """Test that ErrorCode in response is treated as invalid."""
@@ -446,4 +449,29 @@ class TestValidateHuntingQuery:
 
         call_args = mock_http_client.make_request.call_args
         payload = call_args[0][2]
+        assert "| getschema" in payload["Query"]
         assert payload["Query"] == "(DeviceProcessEvents | limit 1) | getschema"
+
+    def test_let_query_not_wrapped_in_parens(self, mock_http_client: MagicMock) -> None:
+        """Test that queries containing let statements are NOT wrapped in parentheses."""
+        mock_http_client.make_request.return_value = {"schema": [], "results": []}
+
+        query = 'let x = "hello";\nDeviceInfo | take 1'
+        hunting_service.validate_hunting_query(query)
+
+        call_args = mock_http_client.make_request.call_args
+        payload = call_args[0][2]
+        # Must NOT start with '(' — let statements are invalid inside parens
+        assert not payload["Query"].startswith("(")
+        assert payload["Query"].endswith("| getschema")
+
+    def test_error_dict_extracts_message(self, mock_http_client: MagicMock) -> None:
+        """Test that a nested error dict surfaces the message string."""
+        mock_http_client.make_request.return_value = {
+            "error": {"code": "BadRequest", "message": "Syntax error near position 5"},
+        }
+
+        result = hunting_service.validate_hunting_query("BAD QUERY")
+
+        assert result["valid"] is False
+        assert result["error"] == "Syntax error near position 5"
