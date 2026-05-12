@@ -18,10 +18,7 @@ ci:
 	ruff format --check fabric_rti_mcp
 	ruff check fabric_rti_mcp
 	ty check fabric_rti_mcp
-	pytest
+	pytest tests
 
 run:
 	uvx .
-
-live-test:
-	python -m tests.live.test_kusto_tools_live

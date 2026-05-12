@@ -87,9 +87,9 @@ def get_tasks_with_status(status_type: str, project_id: Optional[str] = None) ->
 ## Architecture & Design
 
 ### High-Level Structure
-- The project is organized into modules, each responsible for a specific service (e.g., `kusto`, `eventstream`)
+- The project is organized into modules, each responsible for a specific service (e.g., `hunting`)
 - Each `service` needs to declare it's tools under `{service_name}_tools.py`. Preferably, this would be a light wrapper around the service module named {service_name}_service.py.
-- All logic should go to the service module (e.g., `kusto_service.py`), which contains the core functionality and business logic.
+- All logic should go to the service module (e.g., `hunting_service.py`), which contains the core functionality and business logic.
 - If extra modules or classes are needed, make sure to split them out in a meaningful way (i.e., try and avoid `utils.py` or `helpers.py` files that contain unrelated functions).
 
 

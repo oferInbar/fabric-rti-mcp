@@ -10,8 +10,6 @@ logger = logging.getLogger("fabric-rti-mcp")
 
 
 class GlobalFabricRTIEnvVarNames:
-    default_fabric_api_base = "FABRIC_API_BASE"
-    fabric_base_url = "FABRIC_BASE_URL"
     http_host = "FABRIC_RTI_HTTP_HOST"
     transport = "FABRIC_RTI_TRANSPORT"
     http_port = "FABRIC_RTI_HTTP_PORT"  # default port name used by RTI MCP
@@ -26,8 +24,6 @@ class GlobalFabricRTIEnvVarNames:
     instructions = "FABRIC_RTI_INSTRUCTIONS"
 
 
-DEFAULT_FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
-DEFAULT_FABRIC_BASE_URL = "https://fabric.microsoft.com"
 DEFAULT_FABRIC_RTI_TRANSPORT = "stdio"
 DEFAULT_FABRIC_RTI_HTTP_PORT = 3000
 DEFAULT_FABRIC_RTI_HTTP_PATH = "/mcp"
@@ -47,8 +43,6 @@ _LEGACY_TRUE_VALUES = {"true", "1"}
 
 @dataclass(slots=True, frozen=True)
 class GlobalFabricRTIConfig:
-    fabric_api_base: str
-    fabric_base_url: str
     transport: str
     http_host: str
     http_port: int
@@ -78,8 +72,6 @@ class GlobalFabricRTIConfig:
     @staticmethod
     def from_env() -> GlobalFabricRTIConfig:
         return GlobalFabricRTIConfig(
-            fabric_api_base=os.getenv(GlobalFabricRTIEnvVarNames.default_fabric_api_base, DEFAULT_FABRIC_API_BASE),
-            fabric_base_url=os.getenv(GlobalFabricRTIEnvVarNames.fabric_base_url, DEFAULT_FABRIC_BASE_URL),
             transport=os.getenv(GlobalFabricRTIEnvVarNames.transport, DEFAULT_FABRIC_RTI_TRANSPORT),
             http_host=os.getenv(GlobalFabricRTIEnvVarNames.http_host, DEFAULT_FABRIC_RTI_HTTP_HOST),
             http_port=int(
@@ -108,8 +100,6 @@ class GlobalFabricRTIConfig:
         """Return a list of environment variable names that are currently set."""
         result: list[str] = []
         env_vars = [
-            GlobalFabricRTIEnvVarNames.default_fabric_api_base,
-            GlobalFabricRTIEnvVarNames.fabric_base_url,
             GlobalFabricRTIEnvVarNames.transport,
             GlobalFabricRTIEnvVarNames.http_host,
             GlobalFabricRTIEnvVarNames.http_port,
@@ -158,8 +148,6 @@ class GlobalFabricRTIConfig:
         )
 
         return GlobalFabricRTIConfig(
-            fabric_api_base=base_config.fabric_api_base,
-            fabric_base_url=base_config.fabric_base_url,
             transport=transport,
             http_host=http_host,
             http_port=http_port,

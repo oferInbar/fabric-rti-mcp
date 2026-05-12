@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "microsoft-fabric-rti-mcp"
 dynamic = ["version"]
-description = "Microsoft Fabric RTI MCP"
+description = "Microsoft 365 Defender Advanced Hunting MCP server"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -19,9 +19,7 @@ classifiers = [
 dependencies = [
     "httpx~=0.28.1",
     "fastmcp>=3.0,<4",
-    "azure-kusto-data>=6.0.3,<7",
     "azure-identity>=1.24.0,<2",
-    "azure-kusto-ingest>=6.0.3,<7",
     "msal>=1.32.0,<2"
 ]
 
@@ -30,12 +28,6 @@ dev = [
     "pytest>=8.3.5",
     "ruff>=0.14.10",
     "ty",
-]
-notebook = [
-    "numpy",
-    "pandas",
-    "ipykernel",
-    "Kqlmagic",
 ]
 
 [project.scripts]

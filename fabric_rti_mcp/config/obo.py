@@ -2,6 +2,8 @@ import argparse
 import os
 from dataclasses import dataclass
 
+from fabric_rti_mcp.config import logger
+
 
 class FabricRtiMcpOBOFlowEnvVarNames:
     """Environment variable names for OBO Flow configuration."""
@@ -11,14 +13,31 @@ class FabricRtiMcpOBOFlowEnvVarNames:
     entra_app_client_id = "FABRIC_RTI_MCP_ENTRA_APP_CLIENT_ID"
     # user assigned managed identity client id used as Federated credentials on the Entra App (entra_app_client_id)
     umi_client_id = "FABRIC_RTI_MCP_USER_MANAGED_IDENTITY_CLIENT_ID"
-    kusto_audience = "FABRIC_RTI_MCP_KUSTO_AUDIENCE"  # Kusto audience, ex: https://<clustername>.kusto.windows.net
+    # Audience the OBO-exchanged token targets.
+    token_audience = "FABRIC_RTI_MCP_TOKEN_AUDIENCE"
+    # Deprecated alias; retained for backward compatibility.
+    legacy_kusto_audience = "FABRIC_RTI_MCP_KUSTO_AUDIENCE"
 
 
-# Default values for OBO Flow configuration
 DEFAULT_FABRIC_RTI_MCP_AZURE_TENANT_ID = "72f988bf-86f1-41af-91ab-2d7cd011db47"  # MS tenant id
 DEFAULT_FABRIC_RTI_MCP_ENTRA_APP_CLIENT_ID = ""
 DEFAULT_FABRIC_RTI_MCP_USER_MANAGED_IDENTITY_CLIENT_ID = ""
-DEFAULT_FABRIC_RTI_MCP_KUSTO_AUDIENCE = "https://kusto.kusto.windows.net"
+DEFAULT_FABRIC_RTI_MCP_TOKEN_AUDIENCE = "https://graph.microsoft.com/.default"
+
+
+def _resolve_token_audience() -> str:
+    """Resolve the token audience, honoring the deprecated kusto-audience env var as a fallback."""
+    value = os.getenv(FabricRtiMcpOBOFlowEnvVarNames.token_audience)
+    if value is not None:
+        return value
+    legacy = os.getenv(FabricRtiMcpOBOFlowEnvVarNames.legacy_kusto_audience)
+    if legacy is not None:
+        logger.warning(
+            f"{FabricRtiMcpOBOFlowEnvVarNames.legacy_kusto_audience} is deprecated; "
+            f"use {FabricRtiMcpOBOFlowEnvVarNames.token_audience} instead."
+        )
+        return legacy
+    return DEFAULT_FABRIC_RTI_MCP_TOKEN_AUDIENCE
 
 
 @dataclass(slots=True, frozen=True)
@@ -28,7 +47,7 @@ class FabricRtiMcpOBOFlowAuthConfig:
     azure_tenant_id: str
     entra_app_client_id: str
     umi_client_id: str
-    kusto_audience: str
+    token_audience: str
 
     @staticmethod
     def from_env() -> "FabricRtiMcpOBOFlowAuthConfig":
@@ -43,9 +62,7 @@ class FabricRtiMcpOBOFlowAuthConfig:
             umi_client_id=os.getenv(
                 FabricRtiMcpOBOFlowEnvVarNames.umi_client_id, DEFAULT_FABRIC_RTI_MCP_USER_MANAGED_IDENTITY_CLIENT_ID
             ),
-            kusto_audience=os.getenv(
-                FabricRtiMcpOBOFlowEnvVarNames.kusto_audience, DEFAULT_FABRIC_RTI_MCP_KUSTO_AUDIENCE
-            ),
+            token_audience=_resolve_token_audience(),
         )
 
     @staticmethod
@@ -56,7 +73,8 @@ class FabricRtiMcpOBOFlowAuthConfig:
             FabricRtiMcpOBOFlowEnvVarNames.azure_tenant_id,
             FabricRtiMcpOBOFlowEnvVarNames.entra_app_client_id,
             FabricRtiMcpOBOFlowEnvVarNames.umi_client_id,
-            FabricRtiMcpOBOFlowEnvVarNames.kusto_audience,
+            FabricRtiMcpOBOFlowEnvVarNames.token_audience,
+            FabricRtiMcpOBOFlowEnvVarNames.legacy_kusto_audience,
         ]
         for env_var in env_vars:
             if os.getenv(env_var) is not None:
@@ -82,7 +100,7 @@ class FabricRtiMcpOBOFlowAuthConfig:
             azure_tenant_id=obo_config.azure_tenant_id,
             entra_app_client_id=entra_app_client_id,
             umi_client_id=umi_client_id,
-            kusto_audience=obo_config.kusto_audience,
+            token_audience=obo_config.token_audience,
         )
 
 

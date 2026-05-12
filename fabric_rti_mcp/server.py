@@ -5,21 +5,16 @@ import types
 from datetime import datetime, timezone
 
 from mcp.server.fastmcp import FastMCP
-from mcp.types import ToolAnnotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from fabric_rti_mcp import __version__
 from fabric_rti_mcp.authentication.auth_middleware import add_auth_middleware
 from fabric_rti_mcp.compat.ms_foundry import SchemaCompatibleMCP
-from fabric_rti_mcp.config import AH_MODE_ADVANCED_HUNTING, AH_MODE_VIBE_HUNTING, logger
+from fabric_rti_mcp.config import AH_MODE_VIBE_HUNTING, logger
 from fabric_rti_mcp.config import global_config as config
 from fabric_rti_mcp.config.obo import obo_config
-from fabric_rti_mcp.services.activator import activator_tools
-from fabric_rti_mcp.services.eventstream import eventstream_tools
 from fabric_rti_mcp.services.hunting import hunting_tools
-from fabric_rti_mcp.services.kusto import kusto_config, kusto_service, kusto_tools
-from fabric_rti_mcp.services.map import map_tools
 
 # Global variable to store server start time
 server_start_time = datetime.now(timezone.utc)
@@ -54,40 +49,18 @@ VIBE_HUNTING_INSTRUCTIONS = (
 )
 
 
-def _maybe_register_shots_tool(mcp: FastMCP) -> None:
-    """Register kusto_get_shots if KUSTO_SHOTS_TABLE is configured."""
-    shots_config = kusto_config.KustoConfig.from_env()
-    if shots_config.shots_table:
-        mcp.add_tool(
-            kusto_service.kusto_get_shots,
-            annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
-        )
-        logger.info("kusto_get_shots tool registered (KUSTO_SHOTS_TABLE is configured)")
-
-
 def register_tools(mcp: FastMCP) -> None:
-    """Register tools with the MCP server based on the configured AH_MODE."""
-    if config.ah_mode == AH_MODE_ADVANCED_HUNTING:
-        logger.info("AH_MODE=AdvancedHunting — registering core hunting tools only")
-        hunting_tools.register_core_tools(mcp)
-    elif config.ah_mode == AH_MODE_VIBE_HUNTING:
-        logger.info("AH_MODE=VibeHunting — registering all hunting tools (core + enrichment)")
-        hunting_tools.register_core_tools(mcp)
+    """Register hunting tools with the MCP server.
+
+    Core Advanced Hunting tools are always registered. Enrichment tools are
+    additionally registered when AH_MODE=VibeHunting (or a legacy truthy value).
+    """
+    hunting_tools.register_core_tools(mcp)
+    if config.ah_mode == AH_MODE_VIBE_HUNTING:
+        logger.info("AH_MODE=VibeHunting — registering enrichment tools")
         hunting_tools.register_enrichment_tools(mcp)
     else:
-        # Default: full mode (all services)
-        logger.info("Kusto configuration keys found in environment:")
-        logger.info(", ".join(kusto_config.KustoConfig.existing_env_vars()))
-
-        kusto_tools.register_tools(mcp)
-        eventstream_tools.register_tools(mcp)
-        activator_tools.register_tools(mcp)
-        map_tools.register_tools(mcp)
-        hunting_tools.register_tools(mcp)
-        return
-
-    # For AH modes, conditionally register kusto_get_shots
-    _maybe_register_shots_tool(mcp)
+        logger.info("Registering core Advanced Hunting tools only (set AH_MODE=VibeHunting to enable enrichment)")
 
 
 # Health check function defined at module level
@@ -147,10 +120,8 @@ def main() -> None:
         fastmcp_class = SchemaCompatibleMCP if config.use_ai_foundry_compat else FastMCP
 
         instructions = config.instructions
-        if not instructions and config.ah_mode == AH_MODE_VIBE_HUNTING:
-            instructions = VIBE_HUNTING_INSTRUCTIONS
-        elif not instructions and config.ah_mode == AH_MODE_ADVANCED_HUNTING:
-            instructions = AH_MODE_INSTRUCTIONS
+        if not instructions:
+            instructions = VIBE_HUNTING_INSTRUCTIONS if config.ah_mode == AH_MODE_VIBE_HUNTING else AH_MODE_INSTRUCTIONS
 
         if config.transport == "http":
             fastmcp_server = fastmcp_class(

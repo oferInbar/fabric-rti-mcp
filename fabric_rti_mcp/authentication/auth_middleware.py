@@ -12,11 +12,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
+from fabric_rti_mcp.authentication.request_token import set_auth_token
 from fabric_rti_mcp.authentication.token_obo_exchanger import TokenOboExchanger
 from fabric_rti_mcp.config import global_config as config
 from fabric_rti_mcp.config import logger
 from fabric_rti_mcp.config.obo import obo_config
-from fabric_rti_mcp.services.kusto.kusto_connection import set_auth_token
 
 
 def extract_token_from_header(auth_header: str) -> str:
@@ -109,7 +109,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     # Create token exchanger and perform OBO token exchange
                     token_exchanger = TokenOboExchanger()
                     exchanged_token = await token_exchanger.perform_obo_token_exchange(
-                        user_token=token, resource_uri=obo_config.kusto_audience
+                        user_token=token, resource_uri=obo_config.token_audience
                     )
                     # Update token to use the exchanged token
                     token = exchanged_token
