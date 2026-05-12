@@ -6,32 +6,32 @@ import os
 import sys
 from dataclasses import dataclass
 
-logger = logging.getLogger("fabric-rti-mcp")
+logger = logging.getLogger("defender-ah-mcp")
 
 
-class GlobalFabricRTIEnvVarNames:
-    http_host = "FABRIC_RTI_HTTP_HOST"
-    transport = "FABRIC_RTI_TRANSPORT"
-    http_port = "FABRIC_RTI_HTTP_PORT"  # default port name used by RTI MCP
+class GlobalDefenderAHEnvVarNames:
+    http_host = "DEFENDER_AH_HTTP_HOST"
+    transport = "DEFENDER_AH_TRANSPORT"
+    http_port = "DEFENDER_AH_HTTP_PORT"
     azure_service_deployment_default_port = "PORT"  # Azure App Services or Azure Container Apps uses this port name
     functions_deployment_default_port = "FUNCTIONS_CUSTOMHANDLER_PORT"  # Azure Functions uses this port name
-    http_path = "FABRIC_RTI_HTTP_PATH"
-    stateless_http = "FABRIC_RTI_STATELESS_HTTP"
+    http_path = "DEFENDER_AH_HTTP_PATH"
+    stateless_http = "DEFENDER_AH_STATELESS_HTTP"
     use_obo_flow = "USE_OBO_FLOW"
-    use_ai_foundry_compat = "FABRIC_RTI_AI_FOUNDRY_COMPATIBILITY_SCHEMA"
-    cors_allowed_origins = "FABRIC_RTI_CORS_ORIGINS"
+    use_ai_foundry_compat = "DEFENDER_AH_AI_FOUNDRY_COMPATIBILITY_SCHEMA"
+    cors_allowed_origins = "DEFENDER_AH_CORS_ORIGINS"
     ah_mode = "AH_MODE"
-    instructions = "FABRIC_RTI_INSTRUCTIONS"
+    instructions = "DEFENDER_AH_INSTRUCTIONS"
 
 
-DEFAULT_FABRIC_RTI_TRANSPORT = "stdio"
-DEFAULT_FABRIC_RTI_HTTP_PORT = 3000
-DEFAULT_FABRIC_RTI_HTTP_PATH = "/mcp"
-DEFAULT_FABRIC_RTI_HTTP_HOST = "127.0.0.1"
-DEFAULT_FABRIC_RTI_STATELESS_HTTP = False
+DEFAULT_DEFENDER_AH_TRANSPORT = "stdio"
+DEFAULT_DEFENDER_AH_HTTP_PORT = 3000
+DEFAULT_DEFENDER_AH_HTTP_PATH = "/mcp"
+DEFAULT_DEFENDER_AH_HTTP_HOST = "127.0.0.1"
+DEFAULT_DEFENDER_AH_STATELESS_HTTP = False
 DEFAULT_USE_OBO_FLOW = False
-DEFAULT_FABRIC_RTI_AI_FOUNDRY_COMPATIBILITY_SCHEMA = False
-DEFAULT_FABRIC_RTI_CORS_ORIGINS = "*"
+DEFAULT_DEFENDER_AH_AI_FOUNDRY_COMPATIBILITY_SCHEMA = False
+DEFAULT_DEFENDER_AH_CORS_ORIGINS = "*"
 
 
 AH_MODE_ADVANCED_HUNTING = "AdvancedHunting"
@@ -42,7 +42,7 @@ _LEGACY_TRUE_VALUES = {"true", "1"}
 
 
 @dataclass(slots=True, frozen=True)
-class GlobalFabricRTIConfig:
+class GlobalDefenderAHConfig:
     transport: str
     http_host: str
     http_port: int
@@ -70,29 +70,29 @@ class GlobalFabricRTIConfig:
         return ""
 
     @staticmethod
-    def from_env() -> GlobalFabricRTIConfig:
-        return GlobalFabricRTIConfig(
-            transport=os.getenv(GlobalFabricRTIEnvVarNames.transport, DEFAULT_FABRIC_RTI_TRANSPORT),
-            http_host=os.getenv(GlobalFabricRTIEnvVarNames.http_host, DEFAULT_FABRIC_RTI_HTTP_HOST),
+    def from_env() -> GlobalDefenderAHConfig:
+        return GlobalDefenderAHConfig(
+            transport=os.getenv(GlobalDefenderAHEnvVarNames.transport, DEFAULT_DEFENDER_AH_TRANSPORT),
+            http_host=os.getenv(GlobalDefenderAHEnvVarNames.http_host, DEFAULT_DEFENDER_AH_HTTP_HOST),
             http_port=int(
                 os.getenv(
                     "PORT",
                     os.getenv(
                         "FUNCTIONS_CUSTOMHANDLER_PORT",
-                        os.getenv(GlobalFabricRTIEnvVarNames.http_port, DEFAULT_FABRIC_RTI_HTTP_PORT),
+                        os.getenv(GlobalDefenderAHEnvVarNames.http_port, DEFAULT_DEFENDER_AH_HTTP_PORT),
                     ),
                 )
             ),
-            http_path=os.getenv(GlobalFabricRTIEnvVarNames.http_path, DEFAULT_FABRIC_RTI_HTTP_PATH),
-            stateless_http=os.getenv(GlobalFabricRTIEnvVarNames.stateless_http, "false").lower() in ("true", "1"),
-            use_obo_flow=os.getenv(GlobalFabricRTIEnvVarNames.use_obo_flow, "false").lower() in ("true", "1"),
-            use_ai_foundry_compat=os.getenv(GlobalFabricRTIEnvVarNames.use_ai_foundry_compat, "false").lower()
+            http_path=os.getenv(GlobalDefenderAHEnvVarNames.http_path, DEFAULT_DEFENDER_AH_HTTP_PATH),
+            stateless_http=os.getenv(GlobalDefenderAHEnvVarNames.stateless_http, "false").lower() in ("true", "1"),
+            use_obo_flow=os.getenv(GlobalDefenderAHEnvVarNames.use_obo_flow, "false").lower() in ("true", "1"),
+            use_ai_foundry_compat=os.getenv(GlobalDefenderAHEnvVarNames.use_ai_foundry_compat, "false").lower()
             in ("true", "1"),
             cors_allowed_origins=os.getenv(
-                GlobalFabricRTIEnvVarNames.cors_allowed_origins, DEFAULT_FABRIC_RTI_CORS_ORIGINS
+                GlobalDefenderAHEnvVarNames.cors_allowed_origins, DEFAULT_DEFENDER_AH_CORS_ORIGINS
             ),
-            ah_mode=GlobalFabricRTIConfig._parse_ah_mode(os.getenv(GlobalFabricRTIEnvVarNames.ah_mode, "")),
-            instructions=os.getenv(GlobalFabricRTIEnvVarNames.instructions, None),
+            ah_mode=GlobalDefenderAHConfig._parse_ah_mode(os.getenv(GlobalDefenderAHEnvVarNames.ah_mode, "")),
+            instructions=os.getenv(GlobalDefenderAHEnvVarNames.instructions, None),
         )
 
     @staticmethod
@@ -100,16 +100,16 @@ class GlobalFabricRTIConfig:
         """Return a list of environment variable names that are currently set."""
         result: list[str] = []
         env_vars = [
-            GlobalFabricRTIEnvVarNames.transport,
-            GlobalFabricRTIEnvVarNames.http_host,
-            GlobalFabricRTIEnvVarNames.http_port,
-            GlobalFabricRTIEnvVarNames.http_path,
-            GlobalFabricRTIEnvVarNames.stateless_http,
-            GlobalFabricRTIEnvVarNames.use_obo_flow,
-            GlobalFabricRTIEnvVarNames.use_ai_foundry_compat,
-            GlobalFabricRTIEnvVarNames.cors_allowed_origins,
-            GlobalFabricRTIEnvVarNames.ah_mode,
-            GlobalFabricRTIEnvVarNames.instructions,
+            GlobalDefenderAHEnvVarNames.transport,
+            GlobalDefenderAHEnvVarNames.http_host,
+            GlobalDefenderAHEnvVarNames.http_port,
+            GlobalDefenderAHEnvVarNames.http_path,
+            GlobalDefenderAHEnvVarNames.stateless_http,
+            GlobalDefenderAHEnvVarNames.use_obo_flow,
+            GlobalDefenderAHEnvVarNames.use_ai_foundry_compat,
+            GlobalDefenderAHEnvVarNames.cors_allowed_origins,
+            GlobalDefenderAHEnvVarNames.ah_mode,
+            GlobalDefenderAHEnvVarNames.instructions,
         ]
         for env_var in env_vars:
             if os.getenv(env_var) is not None:
@@ -117,11 +117,11 @@ class GlobalFabricRTIConfig:
         return result
 
     @staticmethod
-    def with_args() -> GlobalFabricRTIConfig:
-        base_config = GlobalFabricRTIConfig.from_env()
+    def with_args() -> GlobalDefenderAHConfig:
+        base_config = GlobalDefenderAHConfig.from_env()
 
         # see if the client is passing these (ex: local debug / test client)
-        parser = argparse.ArgumentParser(description="Fabric RTI MCP Server")
+        parser = argparse.ArgumentParser(description="Defender Advanced Hunting MCP Server")
         parser.add_argument("--stdio", action="store_true", help="Use stdio transport")
         parser.add_argument("--http", action="store_true", help="Use HTTP transport")
         parser.add_argument("--host", type=str, help="HTTP host to listen on")
@@ -147,7 +147,7 @@ class GlobalFabricRTIConfig:
             args.use_ai_foundry_compat if "--use-ai-foundry-compat" in sys.argv else base_config.use_ai_foundry_compat
         )
 
-        return GlobalFabricRTIConfig(
+        return GlobalDefenderAHConfig(
             transport=transport,
             http_host=http_host,
             http_port=http_port,
@@ -162,4 +162,4 @@ class GlobalFabricRTIConfig:
 
 
 # Global configuration instance
-global_config = GlobalFabricRTIConfig.with_args()
+global_config = GlobalDefenderAHConfig.with_args()

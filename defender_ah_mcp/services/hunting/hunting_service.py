@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fabric_rti_mcp.graph_api_http_client import GraphHttpClientCache
+from defender_ah_mcp.graph_api_http_client import GraphHttpClientCache
 
 HUNTING_ENDPOINT = "/security/runHuntingQuery"
 HUNTING_SCHEMA_ENDPOINT = "/security/runHuntingQuery/schema"
@@ -115,7 +115,7 @@ def run_hunting_query(
 
     Requires ThreatHunting.Read.All permission.
 
-    :param query: The hunting query in Kusto Query Language (KQL).
+    :param query: The hunting query in KQL.
         Must reference tables from the Microsoft 365 Defender advanced hunting schema.
     :param timespan: Optional time interval in ISO 8601 format. Default is 30 days.
         Ignored when startTime is provided.

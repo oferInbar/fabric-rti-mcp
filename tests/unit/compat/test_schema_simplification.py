@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from fabric_rti_mcp.compat.ms_foundry import SchemaCompatibleMCP, simplify_schema
+from defender_ah_mcp.compat.ms_foundry import SchemaCompatibleMCP, simplify_schema
 
 
 class TestSimplifySchema:
@@ -64,7 +64,7 @@ class TestSchemaCompatibleMCP:
     def test_all_registered_tools_have_simplified_schemas(self):
         mcp = SchemaCompatibleMCP("test")
 
-        from fabric_rti_mcp.services.hunting import hunting_tools
+        from defender_ah_mcp.services.hunting import hunting_tools
 
         hunting_tools.register_tools(mcp)
 

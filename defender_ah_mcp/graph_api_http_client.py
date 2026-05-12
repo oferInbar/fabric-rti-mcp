@@ -6,19 +6,19 @@ from typing import Any, cast
 import httpx
 from azure.identity import ChainedTokenCredential, ClientSecretCredential, DefaultAzureCredential
 
-from fabric_rti_mcp.config import logger
+from defender_ah_mcp.config import logger
 
 GRAPH_API_BASE_URL_DEFAULT = "https://graph.microsoft.com/v1.0"
 GRAPH_TOKEN_SCOPE_DEFAULT = "https://graph.microsoft.com/.default"
 
 
 class GraphEnvVarNames:
-    tenant_id = "FABRIC_GRAPH_TENANT_ID"
-    client_id = "FABRIC_GRAPH_CLIENT_ID"
-    client_secret = "FABRIC_GRAPH_CLIENT_SECRET"
-    api_base_url = "FABRIC_GRAPH_API_BASE_URL"
-    token_scope = "FABRIC_GRAPH_TOKEN_SCOPE"
-    auth_prefer_default = "FABRIC_GRAPH_AUTH_PREFER_DEFAULT"
+    tenant_id = "DEFENDER_GRAPH_TENANT_ID"
+    client_id = "DEFENDER_GRAPH_CLIENT_ID"
+    client_secret = "DEFENDER_GRAPH_CLIENT_SECRET"
+    api_base_url = "DEFENDER_GRAPH_API_BASE_URL"
+    token_scope = "DEFENDER_GRAPH_TOKEN_SCOPE"
+    auth_prefer_default = "DEFENDER_GRAPH_AUTH_PREFER_DEFAULT"
 
 
 class GraphAPIHttpClient:
@@ -27,8 +27,8 @@ class GraphAPIHttpClient:
     Handles authentication transparently using Azure credential providers.
 
     Supports two authentication modes:
-    - Client credentials (app-only): set FABRIC_GRAPH_TENANT_ID, FABRIC_GRAPH_CLIENT_ID,
-      and FABRIC_GRAPH_CLIENT_SECRET environment variables.
+    - Client credentials (app-only): set DEFENDER_GRAPH_TENANT_ID, DEFENDER_GRAPH_CLIENT_ID,
+      and DEFENDER_GRAPH_CLIENT_SECRET environment variables.
     - Default Azure credential: falls back to az login / managed identity / etc.
     """
 

@@ -1,7 +1,7 @@
 import concurrent.futures
 from typing import Any
 
-from fabric_rti_mcp.services.hunting.hunting_service import run_hunting_query
+from defender_ah_mcp.services.hunting.hunting_service import run_hunting_query
 
 _MAX_INSIGHT_RESULTS = 20
 

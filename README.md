@@ -3,7 +3,7 @@
 A Model Context Protocol (MCP) server for **Microsoft 365 Defender Advanced Hunting**. It exposes the [Advanced Hunting API](https://learn.microsoft.com/en-us/graph/api/security-security-runhuntingquery) (via Microsoft Graph Security) as MCP tools that agents can call to investigate threats across devices, identities, email, and cloud apps.
 
 > [!NOTE]
-> This project was forked from the Microsoft Fabric RTI MCP server and stripped down to focus exclusively on Advanced Hunting / Vibe Hunting workflows.
+> This project was forked from the Defender Advanced Hunting MCP server and stripped down to focus exclusively on Advanced Hunting / Vibe Hunting workflows.
 
 ### 🔍 How It Works
 
@@ -54,7 +54,7 @@ The server registers tools according to the `AH_MODE` environment variable:
 
 ```bash
 git clone <this repo>
-cd fabric-rti-mcp
+cd defender-ah-mcp
 pip install -e ".[dev]"
 ```
 
@@ -66,7 +66,7 @@ pip install -e ".[dev]"
     "servers": {
       "defender-hunting": {
         "command": "uv",
-        "args": ["--directory", "/path/to/fabric-rti-mcp", "run", "-m", "fabric_rti_mcp.server"],
+        "args": ["--directory", "/path/to/defender-advanced-hunting-mcp", "run", "-m", "defender_ah_mcp.server"],
         "env": {
           "AH_MODE": "VibeHunting"
         }
@@ -96,12 +96,12 @@ The server uses `azure-identity` to obtain Graph tokens. Either app-only client 
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `FABRIC_GRAPH_TENANT_ID` | App-only: tenant ID | none |
-| `FABRIC_GRAPH_CLIENT_ID` | App-only: client ID | none |
-| `FABRIC_GRAPH_CLIENT_SECRET` | App-only: client secret | none |
-| `FABRIC_GRAPH_API_BASE_URL` | Override Graph base URL | `https://graph.microsoft.com/v1.0` |
-| `FABRIC_GRAPH_TOKEN_SCOPE` | Override token scope | `https://graph.microsoft.com/.default` |
-| `FABRIC_GRAPH_AUTH_PREFER_DEFAULT` | Force `DefaultAzureCredential` even if client secrets are set | `false` |
+| `DEFENDER_GRAPH_TENANT_ID` | App-only: tenant ID | none |
+| `DEFENDER_GRAPH_CLIENT_ID` | App-only: client ID | none |
+| `DEFENDER_GRAPH_CLIENT_SECRET` | App-only: client secret | none |
+| `DEFENDER_GRAPH_API_BASE_URL` | Override Graph base URL | `https://graph.microsoft.com/v1.0` |
+| `DEFENDER_GRAPH_TOKEN_SCOPE` | Override token scope | `https://graph.microsoft.com/.default` |
+| `DEFENDER_GRAPH_AUTH_PREFER_DEFAULT` | Force `DefaultAzureCredential` even if client secrets are set | `false` |
 
 If none of the client-credential variables are set, the server falls back to `DefaultAzureCredential` (Azure CLI, managed identity, environment, etc.).
 
@@ -109,15 +109,15 @@ If none of the client-credential variables are set, the server falls back to `De
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `FABRIC_RTI_TRANSPORT` | `stdio` or `http` | `stdio` |
-| `FABRIC_RTI_HTTP_HOST` | Host to bind | `127.0.0.1` |
-| `FABRIC_RTI_HTTP_PORT` | Port to bind (also honors `PORT` / `FUNCTIONS_CUSTOMHANDLER_PORT`) | `3000` |
-| `FABRIC_RTI_HTTP_PATH` | MCP endpoint path | `/mcp` |
-| `FABRIC_RTI_STATELESS_HTTP` | Enable stateless HTTP mode | `false` |
-| `FABRIC_RTI_CORS_ORIGINS` | Allowed CORS origins | `*` |
-| `FABRIC_RTI_AI_FOUNDRY_COMPATIBILITY_SCHEMA` | Simplify schemas for AI Foundry compatibility | `false` |
-| `FABRIC_RTI_INSTRUCTIONS` | Override the default server instructions string | none |
-| `FABRIC_RTI_DISABLE_AUTH` | Disable auth middleware (HTTP mode) | `false` |
+| `DEFENDER_AH_TRANSPORT` | `stdio` or `http` | `stdio` |
+| `DEFENDER_AH_HTTP_HOST` | Host to bind | `127.0.0.1` |
+| `DEFENDER_AH_HTTP_PORT` | Port to bind (also honors `PORT` / `FUNCTIONS_CUSTOMHANDLER_PORT`) | `3000` |
+| `DEFENDER_AH_HTTP_PATH` | MCP endpoint path | `/mcp` |
+| `DEFENDER_AH_STATELESS_HTTP` | Enable stateless HTTP mode | `false` |
+| `DEFENDER_AH_CORS_ORIGINS` | Allowed CORS origins | `*` |
+| `DEFENDER_AH_AI_FOUNDRY_COMPATIBILITY_SCHEMA` | Simplify schemas for AI Foundry compatibility | `false` |
+| `DEFENDER_AH_INSTRUCTIONS` | Override the default server instructions string | none |
+| `DEFENDER_AH_DISABLE_AUTH` | Disable auth middleware (HTTP mode) | `false` |
 
 ### OBO Flow
 
@@ -126,11 +126,10 @@ When the MCP server sits behind a gateway (e.g., APIM) that forwards user tokens
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `USE_OBO_FLOW` | Enable OBO exchange | `false` |
-| `FABRIC_RTI_MCP_AZURE_TENANT_ID` | Tenant ID | Microsoft tenant |
-| `FABRIC_RTI_MCP_ENTRA_APP_CLIENT_ID` | Entra App client ID | none |
-| `FABRIC_RTI_MCP_USER_MANAGED_IDENTITY_CLIENT_ID` | UMI client ID for federated credential | none |
-| `FABRIC_RTI_MCP_TOKEN_AUDIENCE` | Target audience for the exchanged token | `https://graph.microsoft.com/.default` |
-| `FABRIC_RTI_MCP_KUSTO_AUDIENCE` | **Deprecated** alias for `FABRIC_RTI_MCP_TOKEN_AUDIENCE` | none |
+| `DEFENDER_AH_AZURE_TENANT_ID` | Tenant ID | Microsoft tenant |
+| `DEFENDER_AH_ENTRA_APP_CLIENT_ID` | Entra App client ID | none |
+| `DEFENDER_AH_USER_MANAGED_IDENTITY_CLIENT_ID` | UMI client ID for federated credential | none |
+| `DEFENDER_AH_TOKEN_AUDIENCE` | Target audience for the exchanged token | `https://graph.microsoft.com/.default` |
 
 ## 🔑 Authentication
 
@@ -140,7 +139,7 @@ The server uses [Azure Identity](https://learn.microsoft.com/en-us/azure/develop
 
 ```bash
 pip install -e ".[dev]"
-python -m fabric_rti_mcp.server --stdio
+python -m defender_ah_mcp.server --stdio
 ```
 
 ## 🧪 Tests

@@ -1,7 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from fabric_rti_mcp.services.hunting import hunting_enrichment, hunting_insights, hunting_service
+from defender_ah_mcp.services.hunting import hunting_enrichment, hunting_insights, hunting_service
 
 
 def register_core_tools(mcp: FastMCP) -> None:

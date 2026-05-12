@@ -12,11 +12,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
-from fabric_rti_mcp.authentication.request_token import set_auth_token
-from fabric_rti_mcp.authentication.token_obo_exchanger import TokenOboExchanger
-from fabric_rti_mcp.config import global_config as config
-from fabric_rti_mcp.config import logger
-from fabric_rti_mcp.config.obo import obo_config
+from defender_ah_mcp.authentication.request_token import set_auth_token
+from defender_ah_mcp.authentication.token_obo_exchanger import TokenOboExchanger
+from defender_ah_mcp.config import global_config as config
+from defender_ah_mcp.config import logger
+from defender_ah_mcp.config.obo import obo_config
 
 
 def extract_token_from_header(auth_header: str) -> str:

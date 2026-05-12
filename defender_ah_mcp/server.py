@@ -8,13 +8,13 @@ from mcp.server.fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from fabric_rti_mcp import __version__
-from fabric_rti_mcp.authentication.auth_middleware import add_auth_middleware
-from fabric_rti_mcp.compat.ms_foundry import SchemaCompatibleMCP
-from fabric_rti_mcp.config import AH_MODE_VIBE_HUNTING, logger
-from fabric_rti_mcp.config import global_config as config
-from fabric_rti_mcp.config.obo import obo_config
-from fabric_rti_mcp.services.hunting import hunting_tools
+from defender_ah_mcp import __version__
+from defender_ah_mcp.authentication.auth_middleware import add_auth_middleware
+from defender_ah_mcp.compat.ms_foundry import SchemaCompatibleMCP
+from defender_ah_mcp.config import AH_MODE_VIBE_HUNTING, logger
+from defender_ah_mcp.config import global_config as config
+from defender_ah_mcp.config.obo import obo_config
+from defender_ah_mcp.services.hunting import hunting_tools
 
 # Global variable to store server start time
 server_start_time = datetime.now(timezone.utc)
@@ -37,7 +37,7 @@ AH_MODE_INSTRUCTIONS = (
     "EmailUrlInfo, IdentityLogonEvents, IdentityQueryEvents, IdentityDirectoryEvents, "
     "CloudAppEvents, AlertInfo, AlertEvidence, and more. "
     "Use the get_hunting_schema tool to discover all available tables and their columns. "
-    "Queries use Kusto Query Language (KQL) syntax."
+    "Queries use KQL syntax."
 )
 
 VIBE_HUNTING_INSTRUCTIONS = (
@@ -72,7 +72,7 @@ async def health_check(request: Request) -> JSONResponse:
         {
             "status": "healthy",
             "current_time_utc": current_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
-            "server": "fabric-rti-mcp",
+            "server": "defender-ah-mcp",
             "start_time_utc": server_start_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
         }
     )
@@ -94,7 +94,7 @@ def main() -> None:
         # Set up logging to stderr because stdout is used for stdio transport
         # writing to stderr because stdout is used for the transport
         # and we want to see the logs in the console
-        logger.info("Starting Fabric RTI MCP server")
+        logger.info("Starting Defender Advanced Hunting MCP server")
         logger.info(f"Version: {__version__}")
         logger.info(f"Python version: {sys.version}")
         logger.info(f"Platform: {sys.platform}")
@@ -116,7 +116,7 @@ def main() -> None:
         if config.use_ai_foundry_compat:
             logger.info("AI Foundry compatibility mode enabled - schemas will be simplified")
 
-        name = "fabric-rti-mcp-server"
+        name = "defender-ah-mcp-server"
         fastmcp_class = SchemaCompatibleMCP if config.use_ai_foundry_compat else FastMCP
 
         instructions = config.instructions
@@ -141,8 +141,8 @@ def main() -> None:
         # 2. Add HTTP-specific features if in HTTP mode
         if config.transport == "http":
             add_health_endpoint(fastmcp_server)
-            if os.getenv("FABRIC_RTI_DISABLE_AUTH", "").lower() in ("true", "1"):
-                logger.warning("Authorization middleware DISABLED (FABRIC_RTI_DISABLE_AUTH is set)")
+            if os.getenv("DEFENDER_AH_DISABLE_AUTH", "").lower() in ("true", "1"):
+                logger.warning("Authorization middleware DISABLED (DEFENDER_AH_DISABLE_AUTH is set)")
             else:
                 logger.info("Adding authorization middleware")
                 add_auth_middleware(fastmcp_server)

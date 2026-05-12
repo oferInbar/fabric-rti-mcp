@@ -5,8 +5,8 @@ from typing import Any
 import msal  # type: ignore
 from azure.identity import ManagedIdentityCredential
 
-from fabric_rti_mcp.config import logger
-from fabric_rti_mcp.config.obo import FabricRtiMcpOBOFlowEnvVarNames, obo_config
+from defender_ah_mcp.config import logger
+from defender_ah_mcp.config.obo import DefenderAdvancedHuntingMCPOBOFlowEnvVarNames, obo_config
 
 
 class TokenOboExchanger:
@@ -33,7 +33,7 @@ class TokenOboExchanger:
 
         Args:
             user_token: The original user token
-            resource_uri: The URI of the target resource to get a token (ex. https://kusto.kusto.windows.net)
+            resource_uri: The URI of the target resource to get a token (ex. https://graph.microsoft.com)
 
         Returns:
             New access token for the specified resource
@@ -46,19 +46,19 @@ class TokenOboExchanger:
             self.logger.error("TokenOboExchanger: Entra App client ID is not provided for OBO token exchange")
             raise ValueError(
                 f"Entra App client ID is required for OBO token exchange. "
-                f"Set {FabricRtiMcpOBOFlowEnvVarNames.entra_app_client_id} environment variable."
+                f"Set {DefenderAdvancedHuntingMCPOBOFlowEnvVarNames.entra_app_client_id} environment variable."
             )
 
         if not self.tenant_id:
             self.logger.error("TokenOboExchanger: Tenant ID not available for OBO token exchange")
             raise ValueError(
-                f"{FabricRtiMcpOBOFlowEnvVarNames.azure_tenant_id} environment variable required for OBO token exchange"
+                f"{DefenderAdvancedHuntingMCPOBOFlowEnvVarNames.azure_tenant_id} environment variable required for OBO token exchange"
             )
 
         if not self.umi_client_id:
             self.logger.error("TokenOboExchanger: UMI Client ID not available for OBO token exchange")
             raise ValueError(
-                f"{FabricRtiMcpOBOFlowEnvVarNames.umi_client_id} environment variable required for OBO token exchange"
+                f"{DefenderAdvancedHuntingMCPOBOFlowEnvVarNames.umi_client_id} environment variable required for OBO token exchange"
             )
 
         try:

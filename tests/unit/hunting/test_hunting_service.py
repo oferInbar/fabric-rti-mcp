@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fabric_rti_mcp.services.hunting import hunting_service
+from defender_ah_mcp.services.hunting import hunting_service
 
 
 @pytest.fixture()

@@ -1,13 +1,13 @@
 {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-    "name": "com.microsoft/fabric-rti-mcp",
+    "name": "com.microsoft/defender-advanced-hunting-mcp",
     "description": "Enables AI agents to run Microsoft 365 Defender Advanced Hunting queries via the Microsoft Graph Security API.",
     "version": "0.2.0",
     "title": "Defender Advanced Hunting MCP",
     "packages": [
         {
             "registryType": "PyPI",
-            "identifier": "microsoft-fabric-rti-mcp",
+            "identifier": "defender-advanced-hunting-mcp",
             "version": "0.2.0",
             "transport": {
                 "type": "stdio"
@@ -15,7 +15,7 @@
         }
     ],
     "repository": {
-        "url": "https://github.com/microsoft/fabric-rti-mcp",
+        "url": "https://github.com/microsoft/defender-advanced-hunting-mcp",
         "source": "github"
     },
     "websiteUrl": "https://learn.microsoft.com/en-us/azure/data-explorer/integrate-mcp-servers"
