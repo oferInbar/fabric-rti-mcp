@@ -47,7 +47,9 @@ AH_MODE_INSTRUCTIONS = (
     "DeviceLogonEvents, DeviceImageLoadEvents, DeviceEvents, EmailEvents, EmailAttachmentInfo, "
     "EmailUrlInfo, IdentityLogonEvents, IdentityQueryEvents, IdentityDirectoryEvents, "
     "CloudAppEvents, AlertInfo, AlertEvidence, and more. "
-    "Use the get_hunting_schema tool to discover all available tables and their columns. "
+    "Depending on the tenant, Advanced Hunting may also surface Microsoft Sentinel tables, including "
+    "built-in tables such as AWSCloudTrail, SecurityEvent, SigninLogs, and custom log tables. "
+    "Use the get_hunting_schema tool to discover all available Defender and Sentinel tables and their columns. "
     "Queries use KQL syntax."
 )
 

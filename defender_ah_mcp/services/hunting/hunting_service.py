@@ -101,11 +101,14 @@ def run_hunting_query(
     """
     Run an advanced hunting query using the Microsoft Graph Security API.
 
-    This executes a KQL query against Microsoft 365 Defender data to proactively
-    look for threats across devices, emails, apps, and identities.
+    This executes a KQL query against Microsoft 365 Defender Advanced Hunting data to proactively
+    look for threats across devices, emails, apps, and identities. Depending on the tenant,
+    Advanced Hunting may also surface Microsoft Sentinel tables such as AWSCloudTrail,
+    SecurityEvent, SigninLogs, and custom log tables.
 
-    The query targets tables in the advanced hunting schema such as
-    DeviceProcessEvents, EmailEvents, IdentityLogonEvents, CloudAppEvents, etc.
+    The query targets tables returned by get_hunting_schema(), including Defender tables such as
+    DeviceProcessEvents, EmailEvents, IdentityLogonEvents, CloudAppEvents, and any Sentinel tables
+    exposed in the schema.
 
     IMPORTANT: Before writing any query, call get_hunting_schema() first to discover
     available tables, columns, and their types. Do NOT guess table or column names —
@@ -119,7 +122,8 @@ def run_hunting_query(
     Requires ThreatHunting.Read.All permission.
 
     :param query: The hunting query in KQL.
-        Must reference tables from the Microsoft 365 Defender advanced hunting schema.
+        Must reference tables from the returned Advanced Hunting schema, which can include
+        both Microsoft Defender and Microsoft Sentinel tables.
     :param timespan: Optional time interval in ISO 8601 format. Default is 30 days.
         Ignored when startTime is provided.
         Examples:
@@ -250,7 +254,8 @@ def get_hunting_schema() -> str:
     The schema can include **Microsoft Defender** Advanced Hunting tables (e.g. Devices,
     Emails, Identity, Alerts) and, when enabled in your environment, **Microsoft Sentinel**
     tables surfaced via Advanced Hunting (e.g. sections like "Sentinel built-in tables (USX)"
-    and "Sentinel custom logs (CustomLogs)").
+    and "Sentinel custom logs (CustomLogs)"). Sentinel examples include AWSCloudTrail,
+    SecurityEvent, SigninLogs, and custom log tables.
 
     Use get_table_schema(table_name) to get the full column details for a specific table.
 
@@ -290,6 +295,9 @@ def get_hunting_schema() -> str:
 def get_table_schema(table_name: str) -> str:
     """
     Retrieves the detailed column schema for a single Advanced Hunting table.
+
+    The requested table can be a Microsoft Defender table or a Microsoft Sentinel table surfaced
+    through Advanced Hunting, as long as it appears in get_hunting_schema().
 
     Returns column names, types, entity annotations, and descriptions in a
     compact format suitable for writing KQL queries.
@@ -339,6 +347,9 @@ def validate_hunting_query(query: str) -> dict[str, Any]:
     Appends '| getschema' to the query and executes it. The engine validates syntax
     and semantics (table/column existence) but only returns the output column schema,
     not the actual data rows. This is significantly cheaper than a full execution.
+
+    Queries may reference Microsoft Defender tables and any Microsoft Sentinel tables surfaced
+    in get_hunting_schema().
 
     Use this tool to verify a query is correct BEFORE running it with run_hunting_query.
     This is especially useful in agentic loops where LLM-generated KQL may contain errors.
