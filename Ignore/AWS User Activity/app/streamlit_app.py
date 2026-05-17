@@ -236,12 +236,15 @@ jobs: dict[str, dict] = {
 # when a single query in the batch is slow.
 _BATCHES: list[tuple[str, list[str]]] = [
     # `top_principals` -> expander (line ~271), kept last.
-    ("Rows 1–2", ["volume", "login_outcome", "top_failed", "logins_by_region", "new_geo", "top_principals"]),
+    ("Health & Volume, Authentication & Access",
+     ["volume", "login_outcome", "top_failed", "logins_by_region", "new_geo", "top_principals"]),
     # `iam_table` -> expander (line ~351), kept last.
-    ("Rows 3 & 5", ["iam_timeline", "cross_account", "region_heatmap", "iam_table"]),
+    ("IAM & Privilege Changes, Cross-Account & Region",
+     ["iam_timeline", "cross_account", "region_heatmap", "iam_table"]),
     # No expander-only queries in this batch (the row-7 expander reuses
     # geo_* results that are already needed for the visible map/drilldown).
-    ("Rows 6 & 7", ["top_errors", "top_event_sources", "top_source_ips", "geo_logins", "geo_baseline", "geo_alerts"]),
+    ("Top-N Drill-downs, Geo map & entity deep-dive",
+     ["top_errors", "top_event_sources", "top_source_ips", "geo_logins", "geo_baseline", "geo_alerts"]),
 ]
 results: dict[str, object] = {}
 
@@ -251,10 +254,7 @@ def _run_next_batch(idx: int) -> None:
     batch_jobs = {n: jobs[n] for n in names if n in jobs}
     if not batch_jobs:
         return
-    with st.spinner(
-        f"Running batch {idx + 1}/{len(_BATCHES)} — {label} "
-        f"({len(batch_jobs)} queries)…"
-    ):
+    with st.spinner(f"Refreshing {label}…"):
         results.update(client.query_many(batch_jobs))
 
 
