@@ -212,7 +212,7 @@ def run_hunting_query(
                 now = _utcnow()
                 payload[_START_TIME_FIELD] = _format_dt(now - delta)
                 payload[_END_TIME_FIELD] = _format_dt(now)
-
+    print(f"Running hunting query with payload: {payload}")
     response = GraphHttpClientCache.get_client().make_request(
         "POST",
         _HUNTING_ENDPOINT,
