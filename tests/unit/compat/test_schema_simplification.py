@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from fabric_rti_mcp.compat.ms_foundry import SchemaCompatibleMCP, simplify_schema
+from defender_ah_mcp.compat.ms_foundry import SchemaCompatibleMCP, simplify_schema
 
 
 class TestSimplifySchema:
@@ -64,15 +64,9 @@ class TestSchemaCompatibleMCP:
     def test_all_registered_tools_have_simplified_schemas(self):
         mcp = SchemaCompatibleMCP("test")
 
-        from fabric_rti_mcp.services.activator import activator_tools
-        from fabric_rti_mcp.services.eventstream import eventstream_tools
-        from fabric_rti_mcp.services.kusto import kusto_tools
-        from fabric_rti_mcp.services.map import map_tools
+        from defender_ah_mcp.services.hunting import hunting_tools
 
-        kusto_tools.register_tools(mcp)
-        eventstream_tools.register_tools(mcp)
-        activator_tools.register_tools(mcp)
-        map_tools.register_tools(mcp)
+        hunting_tools.register_tools(mcp)
 
         tools = asyncio.run(mcp.list_tools())
         assert len(tools) > 0

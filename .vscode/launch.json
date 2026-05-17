@@ -14,25 +14,22 @@
             "name": "Python Debugger: Debug server.py with Arguments",
             "type": "debugpy",
             "request": "launch",
-            "program": "fabric_rti_mcp/server.py",
-            "console": "integratedTerminal",
-            "env": {
-                "KUSTO_SERVICE_URI": "https://help.kusto.windows.net/"
-            }
+            "program": "defender_ah_mcp/server.py",
+            "console": "integratedTerminal"
         },
         {
-            "name": "Debug: fabric-rti-mcp-ah-dev-zava-corp",
+            "name": "Debug: defender-ah-mcp-dev-zava-corp",
             "type": "debugpy",
             "request": "launch",
             "python": "${workspaceFolder}/.venv/bin/python",
-            "program": "fabric_rti_mcp/server.py",
+            "program": "defender_ah_mcp/server.py",
             "console": "integratedTerminal",
             "preLaunchTask": "pip-install-dev",
             "env": {
-                "FABRIC_GRAPH_TENANT_ID": "0527ecb7-06fb-4769-b324-fd4a3bb865eb",
-                "FABRIC_GRAPH_API_BASE_URL": "https://partnersgw.securitycenter.windows.com/api/mdgw/gaia/medeinaapi",
-                "FABRIC_GRAPH_TOKEN_SCOPE": "https://securitycenter.microsoft.com/mtp/.default",
-                "FABRIC_GRAPH_AUTH_PREFER_DEFAULT": "true",
+                "DEFENDER_GRAPH_TENANT_ID": "0527ecb7-06fb-4769-b324-fd4a3bb865eb",
+                "DEFENDER_GRAPH_API_BASE_URL": "https://partnersgw.securitycenter.windows.com/api/mdgw/gaia/medeinaapi",
+                "DEFENDER_GRAPH_TOKEN_SCOPE": "https://securitycenter.microsoft.com/mtp/.default",
+                "DEFENDER_GRAPH_AUTH_PREFER_DEFAULT": "true",
                 "AH_MODE": "true",
                 "HUNTING_QUERY_FIELD_NAME": "queryText",
                 "HUNTING_ENDPOINT": "/hunting/RunHuntingQuery",
@@ -41,20 +38,20 @@
             }
         },
         {
-            "name": "Debug (HTTP, no auth): fabric-rti-mcp-ah-dev-zava-corp",
+            "name": "Debug (HTTP, no auth): defender-ah-mcp-dev-zava-corp",
             "type": "debugpy",
             "request": "launch",
             "python": "${workspaceFolder}/.venv/bin/python",
-            "program": "fabric_rti_mcp/server.py",
+            "program": "defender_ah_mcp/server.py",
             "args": ["--http", "--host", "127.0.0.1", "--port", "8080"],
             "console": "integratedTerminal",
             "preLaunchTask": "pip-install-dev",
             "env": {
-                "FABRIC_RTI_DISABLE_AUTH": "true",
-                "FABRIC_GRAPH_TENANT_ID": "0527ecb7-06fb-4769-b324-fd4a3bb865eb",
-                "FABRIC_GRAPH_API_BASE_URL": "https://partnersgw.securitycenter.windows.com/api/mdgw/gaia/medeinaapi",
-                "FABRIC_GRAPH_TOKEN_SCOPE": "https://securitycenter.microsoft.com/mtp/.default",
-                "FABRIC_GRAPH_AUTH_PREFER_DEFAULT": "true",
+                "DEFENDER_AH_DISABLE_AUTH": "true",
+                "DEFENDER_GRAPH_TENANT_ID": "0527ecb7-06fb-4769-b324-fd4a3bb865eb",
+                "DEFENDER_GRAPH_API_BASE_URL": "https://partnersgw.securitycenter.windows.com/api/mdgw/gaia/medeinaapi",
+                "DEFENDER_GRAPH_TOKEN_SCOPE": "https://securitycenter.microsoft.com/mtp/.default",
+                "DEFENDER_GRAPH_AUTH_PREFER_DEFAULT": "true",
                 "AH_MODE": "true",
                 "HUNTING_QUERY_FIELD_NAME": "queryText",
                 "HUNTING_ENDPOINT": "/hunting/RunHuntingQuery",
@@ -70,10 +67,7 @@
             "args": [
                 "${file}"
             ],
-            "console": "integratedTerminal",
-            "env": {
-                "KUSTO_SERVICE_URI": "https://help.kusto.windows.net/"
-            }
+            "console": "integratedTerminal"
         }
     ]
 }

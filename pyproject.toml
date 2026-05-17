@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "setuptools_scm>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "microsoft-fabric-rti-mcp"
+name = "defender-advanced-hunting-mcp"
 dynamic = ["version"]
-description = "Microsoft Fabric RTI MCP"
+description = "Microsoft 365 Defender Advanced Hunting MCP server"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -19,9 +19,7 @@ classifiers = [
 dependencies = [
     "httpx~=0.28.1",
     "fastmcp>=3.0,<4",
-    "azure-kusto-data>=6.0.3,<7",
     "azure-identity>=1.24.0,<2",
-    "azure-kusto-ingest>=6.0.3,<7",
     "msal>=1.32.0,<2"
 ]
 
@@ -31,28 +29,22 @@ dev = [
     "ruff>=0.14.10",
     "ty",
 ]
-notebook = [
-    "numpy",
-    "pandas",
-    "ipykernel",
-    "Kqlmagic",
-]
 
 [project.scripts]
-microsoft-fabric-rti-mcp = "fabric_rti_mcp.server:main"
-microsoft_fabric_rti_mcp = "fabric_rti_mcp.server:main"
+defender-advanced-hunting-mcp = "defender_ah_mcp.server:main"
+defender_advanced_hunting_mcp = "defender_ah_mcp.server:main"
 
 [project.urls]
-Homepage = "https://github.com/microsoft/fabric-rti-mcp"
-Repository = "https://github.com/microsoft/fabric-rti-mcp"
-Issues = "https://github.com/microsoft/fabric-rti-mcp/issues"
-Documentation = "https://github.com/microsoft/fabric-rti-mcp#readme"
+Homepage = "https://github.com/microsoft/defender-advanced-hunting-mcp"
+Repository = "https://github.com/microsoft/defender-advanced-hunting-mcp"
+Issues = "https://github.com/microsoft/defender-advanced-hunting-mcp/issues"
+Documentation = "https://github.com/microsoft/defender-advanced-hunting-mcp#readme"
 
 [tool.setuptools]
-packages = ["fabric_rti_mcp"]
+packages = ["defender_ah_mcp"]
 
 [tool.setuptools.package-data]
-fabric_rti_mcp = ["bin/*"]
+defender_ah_mcp = ["bin/*"]
 
 [tool.ruff]
 # Allow lines to be as long as 120.
@@ -84,7 +76,7 @@ ignore = [
 ]
 
 [tool.setuptools_scm]
-write_to = "fabric_rti_mcp/_version.py"
+write_to = "defender_ah_mcp/_version.py"
 
 [dependency-groups]
 dev = [

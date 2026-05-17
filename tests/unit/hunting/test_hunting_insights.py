@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fabric_rti_mcp.services.hunting import hunting_service
-from fabric_rti_mcp.services.hunting.hunting_insights import (
+from defender_ah_mcp.services.hunting import hunting_service
+from defender_ah_mcp.services.hunting.hunting_insights import (
     _build_kql_array,
     get_device_insights,
     get_user_insights,
@@ -19,7 +19,7 @@ from fabric_rti_mcp.services.hunting.hunting_insights import (
 @pytest.fixture()
 def mock_run_query(monkeypatch: pytest.MonkeyPatch) -> Generator[MagicMock, None, None]:
     mock = MagicMock()
-    monkeypatch.setattr("fabric_rti_mcp.services.hunting.hunting_insights.run_hunting_query", mock)
+    monkeypatch.setattr("defender_ah_mcp.services.hunting.hunting_insights.run_hunting_query", mock)
     yield mock
 
 

@@ -1,439 +1,165 @@
-[![Install with UVX in VS Code](https://img.shields.io/badge/VS_Code-Install_Microsoft_Fabric_RTI_MCP_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=ms-fabric-rti&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22microsoft-fabric-rti-mcp%22%5D%7D) [![PyPI Downloads](https://static.pepy.tech/badge/microsoft-fabric-rti-mcp)](https://pepy.tech/projects/microsoft-fabric-rti-mcp)
-
 ## 🎯 Overview
 
-A comprehensive Model Context Protocol (MCP) server implementation for [Microsoft Fabric Real-Time Intelligence (RTI)](https://aka.ms/fabricrti).
-This server enables AI agents to interact with Fabric RTI services by providing tools through the MCP interface, allowing for seamless data querying, analysis, and streaming capabilities.
+A Model Context Protocol (MCP) server for **Microsoft 365 Defender Advanced Hunting**. It exposes the [Advanced Hunting API](https://learn.microsoft.com/en-us/graph/api/security-security-runhuntingquery) (via Microsoft Graph Security) as MCP tools that agents can call to investigate threats across devices, identities, email, and cloud apps.
 
-> [!NOTE]  
-> This project is in Public Preview and implementation may significantly change prior to General Availability.
+> [!NOTE]
+> This project was forked from the Defender Advanced Hunting MCP server and stripped down to focus exclusively on Advanced Hunting / Vibe Hunting workflows.
 
 ### 🔍 How It Works
 
-The Fabric RTI MCP Server acts as a bridge between AI agents and Microsoft Fabric RTI services:
+- 🔄 **MCP Protocol**: Exposes Advanced Hunting capabilities as MCP tools
+- 🏗️ **Natural Language to KQL**: AI agents can translate prompts into Defender hunting queries
+- 💡 **Secure Authentication**: Uses Azure Identity (DefaultAzureCredential or bearer-token HTTP auth)
+- 🧠 **Enrichment**: Optional Vibe Hunting mode adds device/user insights, follow-up suggestions, and result analysis
 
-- 🔄 **MCP Protocol**: Uses the Model Context Protocol to expose Fabric RTI capabilities as tools
-- 🏗️ **Natural Language to KQL**: AI agents can translate natural language requests into KQL queries and Eventstream management
-- 💡 **Secure Authentication**: Leverages Azure Identity for seamless, secure access to your resources
-- ⚡ **Real-time Data Access**: Direct connection to Eventhouse and Eventstreams for live data analysis
-- 📊 **Unified Interface**: For both analytics and streaming workloads with intelligent parameter suggestions
+### ✨ Modes
 
-### ✨ Supported Services
+The server registers tools according to the `AH_MODE` environment variable:
 
-**Eventhouse (Kusto)**: Execute KQL queries against Microsoft Fabric RTI [Eventhouse](https://aka.ms/eventhouse) and [Azure Data Explorer (ADX)](https://aka.ms/adx).
+| `AH_MODE` value         | Tools registered                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| unset / `AdvancedHunting` (default) | Core hunting tools only                                                              |
+| `VibeHunting` (or legacy `true`/`1`) | Core hunting + enrichment tools                                                     |
 
-**Eventstreams**: Manage Microsoft Fabric [Eventstreams](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/event-streams/overview) for real-time data processing:
-- List Eventstreams in workspaces
-- Get Eventstream details and definitions
-- Create new Eventstreams
-- Update existing Eventstreams
-- Delete Eventstreams
+#### Core Advanced Hunting tools
+- **`run_hunting_query`** — Execute a KQL hunting query against Defender data
+- **`validate_hunting_query`** — Validate KQL without running it (uses `| getschema`)
+- **`get_hunting_schema`** — List all Advanced Hunting tables grouped by section
+- **`get_table_schema`** — Get column details for a specific table
 
-**Activator**: Create and manage Microsoft Fabric [Activator](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/data-activator/activator-introduction) triggers for real-time alerting:
-- Create new triggers with KQL source monitoring
-- Set up email and Teams notifications when a condition occurs
-- List Activator artifacts in workspaces
-
-**Map**: Create and manage Microsoft Fabric [Map](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/map/create-map) to visualize geospatial data:
-- Create a new map from a provided configuration
-- Visualize data on maps
-- List Map items in workspaces
-- Delete Map items
-
-**Advanced Hunting**: Run [advanced hunting queries](https://learn.microsoft.com/en-us/graph/api/security-security-runhuntingquery) via the Microsoft Graph Security API:
-- Execute KQL queries against Microsoft 365 Defender data (devices, emails, identities, apps)
-- Proactively hunt for threats across your environment
-- Optional timespan filtering (ISO 8601 duration or date ranges)
-
-### 🧠 Copilot Skills
-
-This repository includes a **KQL Copilot Skill** (`.github/skills/kql/`) that gives AI agents deep KQL expertise when writing, debugging, or reviewing Kusto queries. The skill covers:
-
-- Syntax gotchas and self-correction patterns for common KQL errors
-- Dynamic type discipline, join patterns, datetime pitfalls
-- Memory-safe query patterns and result-size discipline
-- Advanced functions: graph queries, vector similarity, geospatial operations, time series
-- Query templates for deduplication, top-N, sessionization, pivoting, and more
-- Full error-to-fix mapping for rapid recovery
-
-The skill references the Fabric RTI MCP tools (`kusto_query`, `kusto_command`, `kusto_sample_entity`, etc.) so agents know how to execute queries through this MCP server.
-
-## 🚧 Coming soon
-- **Other RTI items**
+#### Vibe Hunting enrichment tools
+- **`get_device_insights`** — Enrich device IDs with general info, vulnerabilities, logon history, and alert evidence
+- **`get_user_insights`** — Enrich user identifiers (UPN/SID) with identity info, logons, alerts, and risk events
+- **`analyze_hunting_results`** — Deterministic heuristics on result sets (chart hints, column stats, filter suggestions)
+- **`summarize_hunting_results`** — Natural-language summary of results via MCP sampling
+- **`suggest_hunting_followups`** — Pivot/follow-up KQL suggestions based on tables and columns used
+- **`get_available_hunting_actions`** — Map result columns to applicable Defender response actions
 
 ### 🔍 Example Prompts
 
-**Eventhouse Analytics:**
-- "Get databases in my Eventhouse"
-- "Sample 10 rows from table 'StormEvents' in Eventhouse"
-- "What can you tell me about StormEvents data?"
-- "Analyze the StormEvents to come up with trend analysis across past 10 years of data"
-- "Analyze the commands in 'CommandExecution' table and categorize them as low/medium/high risks"
-- "Before running this query, check the execution plan and tell me if it's expensive"
-- "Compare these two query approaches and tell me which is more efficient"
-- "Check the cluster health — do we have enough capacity for a heavy analytics job?"
-
-**Eventstream Management:**
-- "List all Eventstreams in my workspace"
-- "Show me the details of my IoT data Eventstream"
-- "Create a new Eventstream for processing sensor data"
-- "Update my existing Eventstream to add a new destination"
-
-**Activator Alerts:**
-- "Using the StormEvents table, notify me via email when there is a flood in Illinois"
-- "Create a teams alert to notify me when my success rate drops below 95%"
-- "List all Activator artifacts in my workspace"
-
-**Map Visualization:**
-- "List all Map items in my workspace"
-- "Create a new Map and add LakeHouse with name 'MyLakeHouse' as a data source to Map item 'MyMap'"
-- "Delete a Map item with name 'MyMap' from my workspace"
-
-**Advanced Hunting:**
 - "Find processes launched by PowerShell in the last 7 days"
 - "Show me failed sign-in attempts across identities"
 - "Hunt for suspicious email attachments in the last 30 days"
 - "List devices with unsigned process executions"
-
-### Available tools
-
-#### Eventhouse (Kusto) - 13 Tools:
-- **`kusto_known_services`** - List all available Kusto services configured in the MCP
-- **`kusto_query`** - Execute KQL queries on the specified database
-- **`kusto_command`** - Execute Kusto management commands (`.show`, `.create`, `.alter`, `.drop`)
-- **`kusto_list_entities`** - List entities (databases, tables, external tables, materialized views, functions, graphs) in a cluster or database
-- **`kusto_describe_database`** - Get schema information for all entities in a database
-- **`kusto_describe_database_entity`** - Get detailed schema for a specific entity (table, external table, materialized view, function, graph)
-- **`kusto_graph_query`** - Execute graph queries using snapshots or transient graphs
-- **`kusto_sample_entity`** - Retrieve sample records from a table, external table, materialized view, or function
-- **`kusto_ingest_inline_into_table`** - Ingest inline CSV data into a specified table
-- **`kusto_get_shots`** - Retrieve semantically similar query examples from a shots table using AI embeddings
-- **`kusto_deeplink_from_query`** - Generate a deeplink URL to open a KQL query in Azure Data Explorer Web Explorer or Microsoft Fabric query workbench
-- **`kusto_show_queryplan`** - Retrieve the execution plan for a KQL query without running it. Returns planning stats (PlanSize, RelopSize), the logical operator tree, and execution hints (estimated row counts, concurrency/spread hints, per-shard scan info with filter detection). Useful for comparing query approaches, catching expensive joins, and validating query syntax before execution.
-- **`kusto_diagnostics`** - Run a best-effort suite of cluster diagnostic commands and return a unified summary. Sections: capacity (resource slots), cluster (nodes/hardware), principal roles (caller permissions), internal diagnostics (health/utilization), workload groups, rowstores, and ingestion failures (last 24h). Each section runs independently — permission failures on one section don't block others.
-
-#### Eventstreams - 17 Tools:
-
-**Core Operations (6 tools):**
-- **`eventstream_list`** - List all Eventstreams in your Fabric workspace
-- **`eventstream_get`** - Get detailed information about a specific Eventstream
-- **`eventstream_get_definition`** - Retrieve complete JSON definition of an Eventstream
-- **`eventstream_create`** - Create new Eventstreams with custom configuration (auto-includes default stream)
-- **`eventstream_update`** - Modify existing Eventstream settings and destinations
-- **`eventstream_delete`** - Remove Eventstreams and associated resources
-
-**Builder Tools (11 tools):**
-- **Session Management**: `eventstream_start_definition`, `eventstream_get_current_definition`, `eventstream_clear_definition`
-- **Sources**: `eventstream_add_sample_data_source`, `eventstream_add_custom_endpoint_source`
-- **Streams**: `eventstream_add_derived_stream`
-- **Destinations**: `eventstream_add_eventhouse_destination`, `eventstream_add_custom_endpoint_destination`
-- **Validation**: `eventstream_validate_definition`, `eventstream_create_from_definition`, `eventstream_list_available_components`
-
-> **💡 Pro Tip**: All tools work with natural language! Just describe what you want to do and the AI agent will use the appropriate tools automatically.
-
-#### Activator - 2 Tools:
-- **`activator_list_artifacts`** - List all Activator artifacts in a Fabric workspace
-- **`activator_create_trigger`** - Create new Activator triggers with KQL source monitoring and email/Teams alerts
-
-#### Map - 7 Tools:
-- **`map_list`** - List all Map items in your Fabric workspace
-- **`map_get`** - Get detailed information about a specific Map item
-- **`map_get_definition`** - Retrieve the full JSON definition of a Map item
-- **`map_create`** - Create a new Map item from a provided configuration
-- **`map_update_definition`** - Replace the full JSON definition of an existing Map item
-- **`map_update`** - Partially update properties of an existing Map item
-- **`map_delete`** - Delete a Map item and its associated configuration
-
-#### Advanced Hunting - 1 Tool:
-- **`run_hunting_query`** - Run a KQL advanced hunting query via the Microsoft Graph Security API against Microsoft 365 Defender data (requires `ThreatHunting.Read.All` permission)
+- "Enrich the top 5 devices from the previous result and suggest follow-ups"
 
 ## Getting Started
 
 ### Prerequisites
-1. Install either the stable or Insiders release of VS Code:
-   * [💫 Stable release](https://code.visualstudio.com/download)
-   * [🔮 Insiders release](https://code.visualstudio.com/insiders)
-2. Install the [GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot) and [GitHub Copilot Chat](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot-chat) extensions
-3. Install `uv`  
-```ps
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```  
-or, check here for [other install options](https://docs.astral.sh/uv/getting-started/installation/#__tabbed_1_2)
+1. Python 3.10+
+2. An account with `ThreatHunting.Read.All` permission on Microsoft Graph
+3. `uv` (recommended) — see https://docs.astral.sh/uv/getting-started/installation/
 
-4. Open VS Code in an empty folder
-
-
-### Install from PyPI (Pip)
-The Fabric RTI MCP Server is available on [PyPI](https://pypi.org/project/microsoft-fabric-rti-mcp/), so you can install it using pip. This is the easiest way to install the server.
-
-#### From VS Code
-    1. Open the command palette (Ctrl+Shift+P) and run the command `MCP: Add Server`
-    2. Select install from Pip
-    3. When prompted, enter the package name `microsoft-fabric-rti-mcp`
-    4. Follow the prompts to install the package and add it to your settings.json or your mcp.json file
-
-The process should end with the below settings in your `settings.json` or your `mcp.json` file.
-
-#### settings.json
-```json
-{
-    "mcp": {
-        "servers": {
-            "fabric-rti-mcp": {
-                "command": "uvx",
-                "args": [
-                    "microsoft-fabric-rti-mcp"
-                ],
-                "env": {
-                    "KUSTO_SERVICE_URI": "https://help.kusto.windows.net/",
-                    "KUSTO_SERVICE_DEFAULT_DB": "Samples",
-                    "FABRIC_API_BASE": "https://api.fabric.microsoft.com/v1"
-                }
-            }
-        }
-    }
-}
-```
-
-> **Note**: All environment variables are optional. The `KUSTO_SERVICE_URI` and `KUSTO_SERVICE_DEFAULT_DB` provide default cluster and database settings. The `AZ_OPENAI_EMBEDDING_ENDPOINT` is only needed for semantic search functionality in the `kusto_get_shots` tool.
-
-#### From GitHub Copilot CLI
-
-Use the interactive command within a GitHub Copilot CLI session:
+### Install from source
 
 ```bash
-/mcp add
-```
-
-Or manually add to your `~/.copilot/mcp-config.json`:
-
-```json
-{
-    "mcpServers": {
-        "fabric-rti-mcp": {
-            "command": "uvx",
-            "args": [
-                "microsoft-fabric-rti-mcp"
-            ],
-            "env": {
-                "KUSTO_SERVICE_URI": "https://help.kusto.windows.net/",
-                "KUSTO_SERVICE_DEFAULT_DB": "Samples",
-                "FABRIC_API_BASE": "https://api.fabric.microsoft.com/v1"
-            }
-        }
-    }
-}
-```
-
-For more information, see the [GitHub Copilot CLI documentation](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli).
-
-### 🔧 Manual Install (Install from source)  
-
-1. Make sure you have Python 3.10+ installed properly and added to your PATH.
-2. Clone the repository
-3. Install the dependencies (`pip install .` or `uv tool install .`)
-4. Add the settings below into your vscode `settings.json` or your `mcp.json` file. 
-5. Modify the path to match the repo location on your machine.
-6. Modify the cluster uri in the settings to match your cluster.
-7. Modify the cluster default database in the settings to match your database.
-8. Modify the embeddings endpoint in the settings to match yours. This step is optional and needed only in case you supply a shots table
-
-```json
-{
-    "mcp": {
-        "servers": {
-            "fabric-rti-mcp": {
-                "command": "uv",
-                "args": [
-                    "--directory",
-                    "C:/path/to/fabric-rti-mcp/",
-                    "run",
-                    "-m",
-                    "fabric_rti_mcp.server"
-                ],
-                "env": {
-                    "KUSTO_SERVICE_URI": "https://help.kusto.windows.net/",
-                    "KUSTO_SERVICE_DEFAULT_DB": "Samples",
-                    "FABRIC_API_BASE": "https://api.fabric.microsoft.com/v1"
-                }
-            }
-        }
-    }
-}
-```
-
-## 🐛 Debugging the MCP Server locally
-Assuming you have python installed and the repo cloned:
-
-### Install locally
-```bash
+git clone <this repo>
+cd defender-ah-mcp
 pip install -e ".[dev]"
 ```
 
-### Configure
+### MCP client configuration (stdio)
 
-Follow the [Manual Install](#🔧-manual-install-install-from-source) instructions.
-
-### Attach the debugger
-Use the `Python: Attach` configuration in your `launch.json` to attach to the running server. 
-Once VS Code picks up the server and starts it, navigate to its output: 
-1. Open command palette (Ctrl+Shift+P) and run the command `MCP: List Servers`
-2. Navigate to `fabric-rti-mcp` and select `Show Output`
-3. Pick up the process ID (PID) of the server from the output
-4. Run the `Python: Attach` configuration in your `launch.json` file, and paste the PID of the server in the prompt
-5. The debugger will attach to the server process, and you can start debugging
-
-
-## 🧪 Test the MCP Server
-
-### Via GitHub Copilot
-1. Open GitHub Copilot in VS Code and [switch to Agent mode](https://code.visualstudio.com/docs/copilot/chat/chat-agent-mode)
-2. You should see the Fabric RTI MCP Server in the list of tools
-3. Try prompts that tell the agent to use the RTI tools, such as:
-   - **Eventhouse**: "List my Kusto tables" or "Show me a sample from the StormEvents table"
-   - **Eventstreams**: "List all Eventstreams in my workspace" or "Show me details of my data processing Eventstream"
-4. The agent should be able to use the Fabric RTI MCP Server tools to complete your query
-
-## ⚙️ Configuration
-
-The MCP server can be configured using the following environment variables:
-
-### Required Environment Variables
-None - the server will work with default settings for demo purposes.
-
-### Optional Environment Variables
-
-| Variable | Service | Description | Default | Example |
-|----------|---------|-------------|---------|---------|
-| `KUSTO_SERVICE_URI` | Kusto | Default Kusto cluster URI | None | `https://mycluster.westus.kusto.windows.net` |
-| `KUSTO_SERVICE_DEFAULT_DB` | Kusto | Default database name for Kusto queries | `NetDefaultDB` | `MyDatabase` |
-| `AZ_OPENAI_EMBEDDING_ENDPOINT` | Kusto | Azure OpenAI embedding endpoint for semantic search in `kusto_get_shots` | None | `https://your-resource.openai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-10-21;impersonate` |
-| `KUSTO_KNOWN_SERVICES` | Kusto | JSON array of preconfigured Kusto services | None | `[{"service_uri":"https://cluster1.kusto.windows.net","default_database":"DB1","description":"Prod"}]` |
-| `KUSTO_EAGER_CONNECT` | Kusto | Whether to eagerly connect to default service on startup (not recommended) | `false` | `true` or `false` |
-| `KUSTO_ALLOW_UNKNOWN_SERVICES` | Kusto | Security setting to allow connections to services not in `KUSTO_KNOWN_SERVICES` | `true` | `true` or `false` |
-| `KUSTO_SHOTS_TABLE` | Kusto | Default shots table name for `kusto_get_shots` when not provided as a parameter | None | `MyDatabase.ShotsTable` |
-| `FABRIC_API_BASE` | Global | Base URL for Microsoft Fabric API | `https://api.fabric.microsoft.com/v1` | `https://api.fabric.microsoft.com/v1` |
-| `FABRIC_BASE_URL` | Global | Base URL for Microsoft Fabric web interface | `https://fabric.microsoft.com` | `https://fabric.microsoft.com` |
-| `FABRIC_RTI_KUSTO_DEEPLINK_STYLE` | Kusto | Override auto-detection of deeplink style | None | `adx` or `fabric` |
-
-### Embedding Endpoint Configuration
-
-The `AZ_OPENAI_EMBEDDING_ENDPOINT` is used by the semantic search functionality (e.g., `kusto_get_shots` function) to find similar query examples. 
-
-**Format Requirements:**
-```
-https://{your-openai-resource}.openai.azure.com/openai/deployments/{deployment-name}/embeddings?api-version={api-version};impersonate
-```
-
-**Components:**
-- `{your-openai-resource}`: Your Azure OpenAI resource name
-- `{deployment-name}`: Your text embedding deployment name (e.g., `text-embedding-ada-002`)
-- `{api-version}`: API version (e.g., `2024-10-21`, `2023-05-15`)
-- `;impersonate`: Authentication method (you might use managed identity)
-
-**Authentication Requirements:**
-- Your Azure identity must have access to the OpenAI resource
-- In case of using managed identity, the OpenAI resource must be configured to accept managed identity authentication
-- The deployment must exist and be accessible
-
-### Configuration of Shots Table
-The `kusto_get_shots` tool retrieves shots that are most similar to your prompt from the shots table. This function requires configuration of:
-- **Shots table**: Should have an "EmbeddingText" (string) column containing the natural language prompt, "AugmentedText" (string) column containing the respective KQL, and "EmbeddingVector" (dynamic) column containing the embedding vector of the EmbeddingText.
-- **Azure OpenAI embedding endpoint**: Used to create embedding vectors for your prompt. Note that this endpoint must use the same model that was used for creating the "EmbeddingVector" column in the shots table.
-
-## 🔑 Authentication
-
-The MCP Server seamlessly integrates with your host operating system's authentication mechanisms. We use Azure Identity via [`DefaultAzureCredential`](https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication/credential-chains?tabs=dac), which tries these authentication methods in order:
-
-1. **Environment Variables** (`EnvironmentCredential`) - Perfect for CI/CD pipelines
-2. **Visual Studio** (`VisualStudioCredential`) - Uses your Visual Studio credentials
-3. **Azure CLI** (`AzureCliCredential`) - Uses your existing Azure CLI login
-4. **Azure PowerShell** (`AzurePowerShellCredential`) - Uses your Az PowerShell login
-5. **Azure Developer CLI** (`AzureDeveloperCliCredential`) - Uses your azd login
-6. **Interactive Browser** (`InteractiveBrowserCredential`) - Falls back to browser-based login if needed
-
-If you're already logged in through any of these methods, the Fabric RTI MCP Server will automatically use those credentials.
-
-## HTTP Mode Configuration for MCP Server
-
-When the MCP server is running locally to the agent in HTTP mode or is deployed to Azure, the following environment variables are used to define and enable HTTP mode. You can find practical examples of this setup in the `tests/live/test_kusto_tools_live_http.py` file:
-
-| Variable | Description | Default | Example |
-|----------|-------------|---------|---------|
-| `FABRIC_RTI_TRANSPORT` | Transport mode for the server | `stdio` | `http` |
-| `FABRIC_RTI_HTTP_HOST` | Host address for HTTP server | `127.0.0.1` | `0.0.0.0` |
-| `FABRIC_RTI_HTTP_PORT` | Port for HTTP server | `3000` | `8080` |
-| `FABRIC_RTI_HTTP_PATH` | HTTP path for MCP endpoint | `/mcp` | `/mcp` |
-| `FABRIC_RTI_STATELESS_HTTP` | Whether to use stateless HTTP mode | `false` | `true` |
-
-HTTP clients connecting to the server need to include the appropriate authentication token in the request headers:
-
-```python
-# Example from test_kusto_tools_live_http.py
-auth_header = f"Bearer {token.token}"
-
-headers = {
-    "Content-Type": "application/json",
-    "Accept": "application/json, text/event-stream",
-    "Authorization": auth_header,
+```json
+{
+  "mcp": {
+    "servers": {
+      "defender-hunting": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/defender-advanced-hunting-mcp", "run", "-m", "defender_ah_mcp.server"],
+        "env": {
+          "AH_MODE": "VibeHunting"
+        }
+      }
+    }
+  }
 }
 ```
 
-### OBO Flow Authentication
+## ⚙️ Configuration
 
-If your scenario involves a user token with a non-Kusto audience and you need to exchange it for a Kusto audience token using the OBO flow, the Fabric RTI MCP Server  can handle this exchange automatically by setting the following environment variables:
+### Advanced Hunting tools
 
-| Variable | Description | Default | Example |
-|----------|-------------|---------|---------|
-| `USE_OBO_FLOW` | Enable OBO flow for token exchange | `false` | `true` |
-| `FABRIC_RTI_MCP_AZURE_TENANT_ID` | Azure AD tenant ID | `72f988bf-86f1-41af-91ab-2d7cd011db47` (Microsoft) | `72f988bf-86f1-41af-91ab-2d7cd011db47` |
-| `FABRIC_RTI_MCP_ENTRA_APP_CLIENT_ID` | Entra App (AAD) Client ID | Your client ID |
-| `FABRIC_RTI_MCP_USER_MANAGED_IDENTITY_CLIENT_ID` | User Managed Identity Client ID | Your UMI client ID |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AH_MODE` | `AdvancedHunting` (core) or `VibeHunting` (core + enrichment). Legacy `true`/`1` maps to `VibeHunting`. | unset → core only |
+| `HUNTING_ENDPOINT` | Override the Graph Security hunting endpoint path | `/security/runHuntingQuery` |
+| `HUNTING_SCHEMA_ENDPOINT` | Override the schema discovery endpoint path | `/security/runHuntingQuery/schema` |
+| `HUNTING_QUERY_FIELD_NAME` | Override the request payload field name for the query | `Query` |
+| `HUNTING_TIMESPAN_FIELD_NAME` | Override the request payload field name for the timespan | `Timespan` |
+| `HUNTING_START_TIME_FIELD_NAME` | Override the request payload field name for `startTime` | `startTime` |
+| `HUNTING_END_TIME_FIELD_NAME` | Override the request payload field name for `endTime` | `endTime` |
 
-This flow is typically used in OAuth scenarios where a gateway like Azure API Management (APIM) is involved (example: https://github.com/ai-microsoft/adsmcp-apim-dual-validation?tab=readme-ov-file). The user authenticates via Entra ID, and APIM forwards the token to the MCP server. The token audience is not Kusto, so the MCP server must perform an OBO token exchange to get a token with the Kusto audience.
-To support this setup, your Microsoft Entra App must be configured to use Federated Credentials following the official guide: https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation. This enables the app to exchange tokens (OBO).
-Additionally, the Entra app must be granted Azure Data Explorer API permissions to successfully acquire an OBO token with the Kusto audience.
+### Microsoft Graph authentication
 
-### Remote Deployment 
-The MCP server can be deployed using the method of your choice. For example, you can follow the guide at https://github.com/Azure-Samples/mcp-sdk-functions-hosting-python/blob/main/ExistingServer.md to deploy the MCP server to an Azure Function App.
+The server uses `azure-identity` to obtain Graph tokens. Either app-only client credentials or `DefaultAzureCredential` can be used.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DEFENDER_GRAPH_TENANT_ID` | App-only: tenant ID | none |
+| `DEFENDER_GRAPH_CLIENT_ID` | App-only: client ID | none |
+| `DEFENDER_GRAPH_CLIENT_SECRET` | App-only: client secret | none |
+| `DEFENDER_GRAPH_API_BASE_URL` | Override Graph base URL | `https://graph.microsoft.com/v1.0` |
+| `DEFENDER_GRAPH_TOKEN_SCOPE` | Override token scope | `https://graph.microsoft.com/.default` |
+| `DEFENDER_GRAPH_AUTH_PREFER_DEFAULT` | Force `DefaultAzureCredential` even if client secrets are set | `false` |
+
+If none of the client-credential variables are set, the server falls back to `DefaultAzureCredential` (Azure CLI, managed identity, environment, etc.).
+
+### HTTP mode
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DEFENDER_AH_TRANSPORT` | `stdio` or `http` | `stdio` |
+| `DEFENDER_AH_HTTP_HOST` | Host to bind | `127.0.0.1` |
+| `DEFENDER_AH_HTTP_PORT` | Port to bind (also honors `PORT` / `FUNCTIONS_CUSTOMHANDLER_PORT`) | `3000` |
+| `DEFENDER_AH_HTTP_PATH` | MCP endpoint path | `/mcp` |
+| `DEFENDER_AH_STATELESS_HTTP` | Enable stateless HTTP mode | `false` |
+| `DEFENDER_AH_CORS_ORIGINS` | Allowed CORS origins | `*` |
+| `DEFENDER_AH_AI_FOUNDRY_COMPATIBILITY_SCHEMA` | Simplify schemas for AI Foundry compatibility | `false` |
+| `DEFENDER_AH_INSTRUCTIONS` | Override the default server instructions string | none |
+| `DEFENDER_AH_DISABLE_AUTH` | Disable auth middleware (HTTP mode) | `false` |
+
+### OBO Flow
+
+When the MCP server sits behind a gateway (e.g., APIM) that forwards user tokens with a different audience, the server can perform an On-Behalf-Of token exchange:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `USE_OBO_FLOW` | Enable OBO exchange | `false` |
+| `DEFENDER_AH_AZURE_TENANT_ID` | Tenant ID | Microsoft tenant |
+| `DEFENDER_AH_ENTRA_APP_CLIENT_ID` | Entra App client ID | none |
+| `DEFENDER_AH_USER_MANAGED_IDENTITY_CLIENT_ID` | UMI client ID for federated credential | none |
+| `DEFENDER_AH_TOKEN_AUDIENCE` | Target audience for the exchanged token | `https://graph.microsoft.com/.default` |
+
+## 🔑 Authentication
+
+The server uses [Azure Identity](https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication/credential-chains?tabs=dac) for token acquisition. In HTTP mode, clients send a bearer token in the `Authorization` header; the middleware stores it in a request-scoped context for downstream Graph calls (and optionally performs OBO exchange).
+
+## 🐛 Local debugging
+
+```bash
+pip install -e ".[dev]"
+python -m defender_ah_mcp.server --stdio
+```
+
+## 🧪 Tests
+
+```bash
+make precommit   # ruff format + ruff check + ty + pytest
+```
 
 ## 🛡️ Security Note
 
-Your credentials are always handled securely through the official [Azure Identity SDK](https://github.com/Azure/azure-sdk-for-net/blob/main/sdk/identity/Azure.Identity/README.md) - **we never store or manage tokens directly**.
-
-MCP as a phenomenon is very novel and cutting-edge. As with all new technology standards, consider doing a security review to ensure any systems that integrate with MCP servers follow all regulations and standards your system is expected to adhere to. This includes not only the Azure MCP Server, but any MCP client/agent that you choose to implement down to the model provider.
-
+Credentials are handled by the official Azure Identity SDK — tokens are never stored or persisted by this server.
 
 ## 👥 Contributing
 
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
-
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+This project welcomes contributions and suggestions. Most contributions require you to agree to a Contributor License Agreement (CLA). For details, visit https://cla.opensource.microsoft.com.
 
 ## 🤝 Code of Conduct
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
-
-## 📚 Documentation
-
-- **[Changelog](./CHANGELOG.md)** - Release history and breaking changes
-- **[Contributing](./CONTRIB.md)** - Contribution guidelines
-
-## Data Collection
-
-The software may collect information about you and your use of the software and send it to Microsoft. Microsoft may use this information to provide services and improve our products and services. You may turn off the telemetry as described in the repository. There are also some features in the software that may enable you and Microsoft to collect data from users of your applications. If you use these features, you must comply with applicable law, including providing appropriate notices to users of your applications together with a copy of Microsoft’s privacy statement. Our privacy statement is located at https://go.microsoft.com/fwlink/?LinkID=824704. You can learn more about data collection and use in the help documentation and our privacy statement. Your use of the software operates as your consent to these practices.
-
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com).
 
 ## Trademarks
 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
-trademarks or logos is subject to and must follow 
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general). Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party's policies.

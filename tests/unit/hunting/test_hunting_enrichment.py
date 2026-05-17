@@ -1,4 +1,4 @@
-from fabric_rti_mcp.services.hunting.hunting_enrichment import (
+from defender_ah_mcp.services.hunting.hunting_enrichment import (
     analyze_hunting_results,
     get_available_hunting_actions,
     suggest_hunting_followups,

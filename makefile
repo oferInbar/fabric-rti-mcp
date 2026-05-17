@@ -1,27 +1,24 @@
 fmt: format check
 
 format:
-	ruff format fabric_rti_mcp
+	ruff format defender_ah_mcp
 
 check:
-	ruff check fabric_rti_mcp --fix
+	ruff check defender_ah_mcp --fix
 
 test:
 	pytest
 
 typecheck:
-	ty check fabric_rti_mcp
+	ty check defender_ah_mcp
 
 precommit: fmt typecheck test
 
 ci:
-	ruff format --check fabric_rti_mcp
-	ruff check fabric_rti_mcp
-	ty check fabric_rti_mcp
-	pytest
+	ruff format --check defender_ah_mcp
+	ruff check defender_ah_mcp
+	ty check defender_ah_mcp
+	pytest tests
 
 run:
 	uvx .
-
-live-test:
-	python -m tests.live.test_kusto_tools_live
