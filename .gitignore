@@ -417,11 +417,8 @@ dist/*
 dist/
 
 */**/_version.py
-ignore/*
-!Ignore/LOCAL_MCP_SETUP.md
-Ignore/LOCAL_MCP_SETUP.md
 copilot-session*.md
-
+ignore/*
 # AWS Login Overview pre-cooked demo data (may contain tenant data)
 dashboards/*
 copilot-session-8f6a4e78-9d18-4d0d-b306-cdb6b0c3a2a5.html

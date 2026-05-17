@@ -54,6 +54,27 @@ class _HuntingSchemaCache:
 
 _DEFAULT_MAX_RESULTS = 500
 
+# Sentinel-surfaced "Bronze Logs" tables (e.g. AWSCloudTrail, SecurityEvent,
+# SigninLogs) reject in-query time-range filters. The engine returns
+# `ErrorMessage: "Bronze Logs table query is missing time range"` whenever a
+# `where TimeGenerated …` clause appears on a Bronze table inside a `let`
+# subquery, a `union` leg, or any reference that isn't the outermost one.
+# We detect this in the response and prepend a remediation hint, since the
+# raw error doesn't tell the agent how to fix it.
+_BRONZE_LOGS_HINT_MARKER = "Bronze Logs table query is missing time range"
+_BRONZE_LOGS_REMEDIATION = (
+    "Bronze Logs tables (Sentinel-surfaced tables such as AWSCloudTrail, "
+    "SecurityEvent, SigninLogs, OfficeActivity, and most custom logs) do not "
+    "accept in-query time-range filters. Pass the time range via this tool's "
+    "`timespan` / `startTime` / `endTime` parameters instead, and do not put "
+    "`where TimeGenerated > ago(...)` clauses inside `let` subqueries that "
+    "reference a Bronze table. For recent-vs-baseline analytics, query the "
+    "Bronze table ONCE with a `timespan` covering both windows and partition "
+    "rows with `extend Bucket = iff(TimeGenerated > ago(...), \"recent\", "
+    "\"baseline\")` — `extend` on TimeGenerated is allowed; only `where` is "
+    "rejected."
+)
+
 
 _ISO_DURATION_RE = re.compile(
     r"^P"
@@ -113,6 +134,32 @@ def run_hunting_query(
     IMPORTANT: Before writing any query, call get_hunting_schema() first to discover
     available tables, columns, and their types. Do NOT guess table or column names —
     the schema varies per tenant and may include custom tables (e.g., SAP, custom logs).
+
+    SENTINEL / BRONZE LOGS TIME-RANGE CONSTRAINT:
+    Tables exposed via Microsoft Sentinel — including `AWSCloudTrail`, `SecurityEvent`,
+    `SigninLogs`, `OfficeActivity`, GCP/Azure activity, and most custom log tables —
+    are classified as **Bronze Logs**. The Advanced Hunting engine returns
+    HTTP 400 with `ErrorMessage: "Bronze Logs table query is missing time range"`
+    if you try to scope these tables with a `where TimeGenerated > ago(...)` (or
+    `between (...)`) clause inside a `let` subquery, a `union` leg, or otherwise
+    away from the outermost table reference. Specifically:
+
+      * **DO** pass the time range via this tool's `timespan` (or `startTime` /
+        `endTime`) parameters — the API-level window is what the engine honors
+        for Bronze tables.
+      * **DO NOT** reference the same Bronze table twice in one query with each
+        reference carrying its own `where TimeGenerated …` filter. Anti-join /
+        baseline-vs-recent patterns written as
+        `let recent = AWSCloudTrail | where TimeGenerated > ago(24h); let baseline = AWSCloudTrail | where TimeGenerated between (...)` will be rejected.
+      * **WORKAROUND** for recent-vs-baseline analytics: pass a single
+        `timespan` that covers BOTH windows, query the Bronze table once, and
+        partition rows with `extend Bucket = iff(TimeGenerated > ago(...), "recent", "baseline")` followed by `summarize ... by key`. Then filter
+        `where countif(Bucket == "baseline") == 0` to get the "new in recent"
+        rows. `extend` on `TimeGenerated` is a computed projection (allowed);
+        the prohibition is specifically on `where`-style time filters.
+      * Defender's own tables (DeviceProcessEvents, EmailEvents,
+        IdentityLogonEvents, CloudAppEvents, AlertEvidence, etc.) are NOT
+        Bronze and accept in-query `where TimeGenerated …` filters normally.
 
     TIP: To discover the output schema of a query before running it fully, append
     "| getschema" to the query. For example:
