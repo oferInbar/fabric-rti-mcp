@@ -1,0 +1,69 @@
+# Workload-role allowlist for the AWS User Activity dashboard.
+#
+# Sessions whose IAM role name (the segment between the second '/' of an
+# AssumedRole ARN and the session-name) matches one of these entries are
+# treated as IdentityClass = "Workload" and suppressed from human-activity
+# rows. Used by the §3 resolution KQL and the noise-reduction baseline.
+#
+# Seeded 2026-05-17 from a 7d probe of AWSCloudTrail in this tenant
+# (top issuer-role names by event volume; obvious service / MDC / Sentinel /
+# EKS / autoscaling / CSPM roles). Volume column is the 7d count at seed
+# time and is informational only.
+#
+# To add a role: append to `roles` (exact name match) or `role_patterns`
+# (regex, matched case-insensitively against the role name).
+#
+# Human-looking roles intentionally EXCLUDED from this allowlist:
+#   - Fullaccessrole  (sessions carry UPN, e.g. .../aaronb@zava-corp.com)
+
+version: 1
+
+# Exact role-name matches.
+roles:
+  # Microsoft Defender for Cloud / CSPM
+  - { name: CspmMonitorAws,                           volume_7d: 438677 }
+  - { name: SensitiveDataDiscovery,                   volume_7d:  17828 }
+  - { name: DefenderForCloud-ArcAutoProvisioning,     volume_7d:   1898 }
+  - { name: DefenderForCloud-DataSecurityPostureDB,   volume_7d:   1076 }
+  - { name: DefenderForCloud-DataThreatProtectionDB,  volume_7d:    269 }
+  - { name: DefenderForCloud-AgentlessScanner,        volume_7d:    122 }
+  - { name: AWS-MDCSetup-HostMgmtRole-eu-north-1-MDCSetup, volume_7d: 8 }
+  # Microsoft Defender for Containers (MDC)
+  - { name: MDCContainersK8sDataCollectionRole,       volume_7d:  20001 }
+  - { name: MDCContainersK8sKinesisToS3Role,          volume_7d:  19984 }
+  - { name: MDCContainersK8sRole,                     volume_7d:   5673 }
+  - { name: MDCContainersAgentlessDiscoveryK8sRole,   volume_7d:   1062 }
+  - { name: MDCContainersImageAssessmentRole,         volume_7d:     24 }
+  # Microsoft Sentinel connectors
+  - { name: MicrosoftSentinelRole,                    volume_7d:  34246 }
+  - { name: OIDC_MicrosoftSentinelRole,               volume_7d:  36346 }
+  # 3rd-party SaaS integrations
+  - { name: CloudHealth_Role-CLDZE,                   volume_7d:  94397 }
+  # EKS node / cluster / OIDC workload roles
+  - { name: EKSnoderole,                              volume_7d:   9917 }
+  - { name: vIAM-EKS-Cluster,                         volume_7d:   5391 }
+  # AWS service-linked roles
+  - { name: AWSServiceRoleForAmazonEKS,               volume_7d:  22367 }
+  - { name: AWSServiceRoleForAmazonEKSNodegroup,      volume_7d:  16125 }
+  - { name: AWSServiceRoleForResourceExplorer,        volume_7d:   5391 }
+  - { name: AWSServiceRoleForAutoScaling,             volume_7d:   5228 }
+  - { name: AWSServiceRoleForAmazonSSM,               volume_7d:    338 }
+  - { name: AWSServiceRoleForElasticLoadBalancing,    volume_7d:     19 }
+  - { name: AWSServiceRoleForSSO,                     volume_7d:      7 }
+  # Lambda execution roles
+  - { name: vulnlambdafunc-role-v54tj6ei,             volume_7d:    554 }
+
+# Regex patterns (case-insensitive) for families of roles.
+# Catches future AWSServiceRoleFor*, MDCContainers*, DefenderForCloud-* etc.
+role_patterns:
+  - "^AWSServiceRoleFor.*"
+  - "^MDCContainers.*"
+  - "^DefenderForCloud-.*"
+  - "^AWS-MDCSetup-.*"
+  - ".*-role-[a-z0-9]{8,}$"          # *-role-<hash>, e.g. vulnlambdafunc-role-v54tj6ei
+  - "^OIDC_.*"                        # OIDC workload federation roles
+
+# IAM users that are demonstrably service accounts (not humans).
+iam_user_service_accounts:
+  - CloudAppSecurityAWS               # Defender for Cloud Apps AWS connector
+  - CAACuser                          # CloudAppSecurity connector user
