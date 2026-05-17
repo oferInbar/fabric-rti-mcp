@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from collections import defaultdict
@@ -5,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from defender_ah_mcp.graph_api_http_client import GraphHttpClientCache
+
+logger = logging.getLogger(__name__)
 
 HUNTING_ENDPOINT = "/security/runHuntingQuery"
 HUNTING_SCHEMA_ENDPOINT = "/security/runHuntingQuery/schema"
@@ -212,7 +215,7 @@ def run_hunting_query(
                 now = _utcnow()
                 payload[_START_TIME_FIELD] = _format_dt(now - delta)
                 payload[_END_TIME_FIELD] = _format_dt(now)
-    print(f"Running hunting query with payload: {payload}")
+    logger.info("Running hunting query with payload: %s", payload)
     response = GraphHttpClientCache.get_client().make_request(
         "POST",
         _HUNTING_ENDPOINT,

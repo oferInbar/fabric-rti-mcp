@@ -1,3 +1,4 @@
+import logging
 import os
 import signal
 import sys
@@ -18,6 +19,16 @@ from defender_ah_mcp.services.hunting import hunting_tools
 
 # Global variable to store server start time
 server_start_time = datetime.now(timezone.utc)
+
+
+def configure_logging() -> None:
+    """Configure process logging for server diagnostics."""
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stderr,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    logging.getLogger().setLevel(logging.INFO)
 
 
 def setup_shutdown_handler(sig: int, frame: types.FrameType | None) -> None:
@@ -87,13 +98,12 @@ def add_health_endpoint(mcp: FastMCP) -> None:
 def main() -> None:
     """Main entry point for the server."""
     try:
+        configure_logging()
+
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, setup_shutdown_handler)  # Signal Interrupt)
         signal.signal(signal.SIGTERM, setup_shutdown_handler)  # Signal Terminate
 
-        # Set up logging to stderr because stdout is used for stdio transport
-        # writing to stderr because stdout is used for the transport
-        # and we want to see the logs in the console
         logger.info("Starting Defender Advanced Hunting MCP server")
         logger.info(f"Version: {__version__}")
         logger.info(f"Python version: {sys.version}")
