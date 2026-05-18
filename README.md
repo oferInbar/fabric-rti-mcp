@@ -191,6 +191,16 @@ A `Dockerfile` is included. The image runs the server in **HTTP transport** mode
 docker build -t defender-ah-mcp .
 ```
 
+### One-shot helper script
+
+```bash
+./scripts/run-docker.sh                          # build + run with .env
+./scripts/run-docker.sh --tenant <tenant-id>     # az login first, then build + run
+./scripts/run-docker.sh --no-build --port 8080   # skip build, expose on 8080
+```
+
+The script verifies Docker, checks for `.env`, optionally runs `az login` against a tenant (and caches a Graph token for `DefaultAzureCredential`), builds the image, and starts the container.
+
 ### Run
 
 ```bash

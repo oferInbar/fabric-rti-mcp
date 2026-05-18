@@ -72,6 +72,43 @@ Update `--directory` to match the absolute path of your local clone.
 }
 ```
 
+## 4b. Alternative: run via Docker (HTTP transport)
+
+If you'd rather run the server as a container (matches production transport)
+instead of via `uv` stdio:
+
+```bash
+cp .env.example .env       # fill in tenant / secrets as needed
+./scripts/run-docker.sh    # or: ./scripts/run-docker.sh --local-token
+```
+
+The server will listen on `http://localhost:3000/mcp`. Then use this MCP config
+entry instead of the `uv`-based one above:
+
+```json
+{
+  "defender-ah-mcp-docker": {
+    "url": "http://localhost:3000/mcp"
+  }
+}
+```
+
+Notes:
+- `.env` sets `DEFENDER_AH_DISABLE_AUTH=true` so the local client can hit
+  `/mcp` without an `Authorization` header. Keep this **local-only**.
+- For bearer pass-through (mirrors production), run with `--local-token` — the
+  host `az` session token is injected as `DEFENDER_GRAPH_ACCESS_TOKEN`. The
+  token is acquired for resource `https://securitycenter.microsoft.com/mtp` by
+  default, matching `DEFENDER_GRAPH_TOKEN_SCOPE` for the Advanced Hunting
+  endpoint. If you point the server at a different API and see 401s or hangs
+  from the upstream call, override the audience:
+  ```bash
+  ./scripts/run-docker.sh --local-token \
+    --token-resource <resource-uri-matching-DEFENDER_GRAPH_TOKEN_SCOPE>
+  ```
+- Change the host port with `./scripts/run-docker.sh --port 8080` and update
+  the `url` accordingly.
+
 ## 5. Launch in VS Code
 
 1. Reload VS Code (or restart the MCP client) so the new server is picked up.
@@ -81,5 +118,11 @@ Update `--directory` to match the absolute path of your local clone.
 ## 6. Troubleshooting
 
 - **401 / token errors** → re-run `az login --tenant 0527ecb7-06fb-4769-b324-fd4a3bb865eb`.
+- **Tool calls hang ~30s then fail with empty error** (Docker mode, `--local-token`) →
+  the host `az` token was acquired for the wrong audience. Restart with
+  `--token-resource https://securitycenter.microsoft.com/mtp` (or whatever
+  matches `DEFENDER_GRAPH_TOKEN_SCOPE`). After restarting the container, also
+  reconnect the MCP client (`/mcp` → disable + enable, or `/restart`) since
+  the previous transport session is gone.
 - **Server not appearing** → check VS Code MCP logs; verify the `--directory` path and that `uv run defender-advanced-hunting-mcp` works from a terminal.
 - **Wrong tenant** → `az account set --subscription <sub-in-ZAVA-CORP>` after login.

@@ -1,9 +1,11 @@
 import asyncio
 import os
+import time
 from collections.abc import Coroutine
 from typing import Any, cast
 
 import httpx
+from azure.core.credentials import AccessToken, TokenCredential
 from azure.identity import ChainedTokenCredential, ClientSecretCredential, DefaultAzureCredential
 
 from defender_ah_mcp.config import logger
@@ -19,6 +21,23 @@ class GraphEnvVarNames:
     api_base_url = "DEFENDER_GRAPH_API_BASE_URL"
     token_scope = "DEFENDER_GRAPH_TOKEN_SCOPE"
     auth_prefer_default = "DEFENDER_GRAPH_AUTH_PREFER_DEFAULT"
+    access_token = "DEFENDER_GRAPH_ACCESS_TOKEN"
+
+
+class _StaticTokenCredential(TokenCredential):
+    """Returns a pre-acquired bearer token, mimicking pass-through scenarios.
+
+    Useful for local development when the host has already obtained a Graph
+    token (e.g. via `az account get-access-token`) and wants to inject it
+    into the container without exposing client secrets.
+    """
+
+    def __init__(self, token: str, expires_on: int | None = None) -> None:
+        # Default 50-minute lifetime — Graph tokens are usually ~1h.
+        self._token = AccessToken(token, expires_on or int(time.time()) + 50 * 60)
+
+    def get_token(self, *scopes: str, **_: Any) -> AccessToken:  # noqa: D401
+        return self._token
 
 
 class GraphAPIHttpClient:
@@ -41,7 +60,15 @@ class GraphAPIHttpClient:
 
     def _get_credential(
         self,
-    ) -> ClientSecretCredential | DefaultAzureCredential | ChainedTokenCredential:
+    ) -> TokenCredential:
+        access_token = os.getenv(GraphEnvVarNames.access_token)
+        if access_token:
+            logger.info(
+                "Using pre-acquired access token from DEFENDER_GRAPH_ACCESS_TOKEN "
+                "(mimicking bearer pass-through)"
+            )
+            return _StaticTokenCredential(access_token)
+
         tenant_id = os.getenv(GraphEnvVarNames.tenant_id)
         client_id = os.getenv(GraphEnvVarNames.client_id)
         client_secret = os.getenv(GraphEnvVarNames.client_secret)
