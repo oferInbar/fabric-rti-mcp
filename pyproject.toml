@@ -40,8 +40,8 @@ Repository = "https://github.com/microsoft/defender-advanced-hunting-mcp"
 Issues = "https://github.com/microsoft/defender-advanced-hunting-mcp/issues"
 Documentation = "https://github.com/microsoft/defender-advanced-hunting-mcp#readme"
 
-[tool.setuptools]
-packages = ["defender_ah_mcp"]
+[tool.setuptools.packages.find]
+include = ["defender_ah_mcp*"]
 
 [tool.setuptools.package-data]
 defender_ah_mcp = ["bin/*"]

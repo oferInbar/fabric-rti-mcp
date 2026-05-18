@@ -10,6 +10,30 @@
                 "reveal": "silent",
                 "panel": "shared"
             }
+        },
+        {
+            "label": "docker-run-debug",
+            "type": "shell",
+            "command": "docker rm -f defender-ah-mcp 2>/dev/null; docker run -d --name defender-ah-mcp -p 3000:3000 -p 5678:5678 -v ${env:HOME}/.azure:/home/mcp/.azure -e DEFENDER_AH_DISABLE_AUTH=true -e DEFENDER_GRAPH_TENANT_ID=0527ecb7-06fb-4769-b324-fd4a3bb865eb -e DEFENDER_GRAPH_API_BASE_URL=https://partnersgw.securitycenter.windows.com/api/mdgw/gaia/medeinaapi -e DEFENDER_GRAPH_TOKEN_SCOPE=https://securitycenter.microsoft.com/mtp/.default -e DEFENDER_GRAPH_AUTH_PREFER_DEFAULT=true -e AH_MODE=true -e HUNTING_QUERY_FIELD_NAME=queryText -e HUNTING_ENDPOINT=/hunting/RunHuntingQuery -e HUNTING_SCHEMA_ENDPOINT=/hunting/GetHuntingSchema -e HUNTING_SCHEMA_OUTPUT_FILE=/tmp/hunting_schema.json --entrypoint python defender-ah-mcp:local -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m defender_ah_mcp.server --http --host 0.0.0.0 --port 3000 && sleep 2 && docker logs -f defender-ah-mcp",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "close": false
+            },
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^.*$",
+                    "file": 1,
+                    "line": 1,
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".",
+                    "endsPattern": "Debugger warning|Uvicorn running|listening for client"
+                }
+            }
         }
     ]
 }

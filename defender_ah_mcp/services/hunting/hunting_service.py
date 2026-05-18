@@ -2,7 +2,7 @@ import os
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from defender_ah_mcp.graph_api_http_client import GraphHttpClientCache
 
@@ -220,9 +220,9 @@ def run_hunting_query(
     )
 
     effective_max = max_results if max_results is not None else _DEFAULT_MAX_RESULTS
-    if effective_max and isinstance(response, dict) and "results" in response:
-        results = response["results"]
-        if isinstance(results, list) and len(results) > effective_max:
+    if effective_max and isinstance(response.get("results"), list):
+        results: list[Any] = response["results"]
+        if len(results) > effective_max:
             total = len(results)
             response["results"] = results[:effective_max]
             response["_truncation_info"] = {
@@ -266,9 +266,9 @@ def get_hunting_schema() -> str:
     # Group tables by section
     sections: dict[str, list[tuple[str, int]]] = defaultdict(list)
     for table in schema:
-        section = table.get("TableSection", "Other")
+        section = str(table.get("TableSection", "Other"))
         section = _SECTION_DISPLAY_NAMES.get(section, section)
-        name = table.get("Name", "Unknown")
+        name = str(table.get("Name", "Unknown"))
         col_count = len(table.get("Schema", []))
         sections[section].append((name, col_count))
 
@@ -360,21 +360,22 @@ def validate_hunting_query(query: str) -> dict[str, Any]:
     except Exception as e:
         return {"valid": False, "error": str(e)}
 
-    if isinstance(result, dict):
-        if "error" in result:
-            error_val = result["error"]
-            # The Graph API may return the error as a nested dict, a string, or
-            # a plain boolean flag.  Always surface a human-readable message.
-            if isinstance(error_val, dict):
-                error_msg = error_val.get("message") or error_val.get("Message") or str(error_val)
-            elif isinstance(error_val, str):
-                error_msg = error_val
-            else:
-                # Boolean or other non-string sentinel — fall back to adjacent detail fields.
-                error_msg = result.get("detail") or result.get("message") or str(error_val)
-            return {"valid": False, "error": error_msg}
-        if result.get("ErrorCode"):
-            return {"valid": False, "error": result.get("ErrorMessage", str(result.get("ErrorCode")))}
+    if "error" in result:
+        error_val: Any = result["error"]
+        # The Graph API may return the error as a nested dict, a string, or
+        # a plain boolean flag.  Always surface a human-readable message.
+        error_msg: str
+        if isinstance(error_val, dict):
+            error_dict = cast(dict[str, Any], error_val)
+            error_msg = str(error_dict.get("message") or error_dict.get("Message") or error_dict)
+        elif isinstance(error_val, str):
+            error_msg = error_val
+        else:
+            # Boolean or other non-string sentinel — fall back to adjacent detail fields.
+            error_msg = str(result.get("detail") or result.get("message") or error_val)
+        return {"valid": False, "error": error_msg}
+    if result.get("ErrorCode"):
+        return {"valid": False, "error": result.get("ErrorMessage", str(result.get("ErrorCode")))}
 
-    schema_rows = result.get("results", []) if isinstance(result, dict) else []
+    schema_rows = result.get("results", [])
     return {"valid": True, "output_schema": schema_rows}
