@@ -104,6 +104,29 @@
                 "HUNTING_SCHEMA_ENDPOINT": "/hunting/GetHuntingSchema"
             }
         },
+        {
+            "name": "Debug: SAP NetWeaver Initial Access (Streamlit)",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "module": "streamlit",
+            "args": [
+                "run",
+                "${workspaceFolder}/dashboards/sap_netweaver_initial_access/app/streamlit_app.py"
+            ],
+            "cwd": "${workspaceFolder}/dashboards/sap_netweaver_initial_access",
+            "console": "integratedTerminal",
+            "env": {
+                "DEFENDER_GRAPH_TENANT_ID": "0527ecb7-06fb-4769-b324-fd4a3bb865eb",
+                "DEFENDER_GRAPH_API_BASE_URL": "https://partnersgw.securitycenter.windows.com/api/mdgw/gaia/medeinaapi",
+                "DEFENDER_GRAPH_TOKEN_SCOPE": "https://securitycenter.microsoft.com/mtp/.default",
+                "DEFENDER_GRAPH_AUTH_PREFER_DEFAULT": "true",
+                "AH_MODE": "true",
+                "HUNTING_QUERY_FIELD_NAME": "queryText",
+                "HUNTING_ENDPOINT": "/hunting/RunHuntingQuery",
+                "HUNTING_SCHEMA_ENDPOINT": "/hunting/GetHuntingSchema"
+            }
+        },
         // debug tests
         {
             "name": "Python Debugger: Test Current File",

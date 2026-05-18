@@ -14,12 +14,14 @@ A Model Context Protocol (MCP) server for **Microsoft 365 Defender Advanced Hunt
 
 ### ✨ Modes
 
-The server registers tools according to the `AH_MODE` environment variable:
+The server registers tools according to the `AH_MODE` environment variable (parsed case-insensitively):
 
-| `AH_MODE` value         | Tools registered                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------ |
-| unset / `AdvancedHunting` (default) | Core hunting tools only                                                              |
-| `VibeHunting` (or legacy `true`/`1`) | Core hunting + enrichment tools                                                     |
+| `AH_MODE` value                          | Tools registered                |
+| ---------------------------------------- | ------------------------------- |
+| unset / empty / `AdvancedHunting`        | Core hunting tools only         |
+| `VibeHunting` (or legacy `true` / `1`)   | Core hunting + enrichment tools |
+
+Unknown values are ignored with a warning and fall back to "core only".
 
 #### Core Advanced Hunting tools
 - **`run_hunting_query`** — Execute a KQL hunting query against Defender data
@@ -48,25 +50,41 @@ The server registers tools according to the `AH_MODE` environment variable:
 ### Prerequisites
 1. Python 3.10+
 2. An account with `ThreatHunting.Read.All` permission on Microsoft Graph
-3. `uv` (recommended) — see https://docs.astral.sh/uv/getting-started/installation/
+3. [`uv`](https://docs.astral.sh/uv/getting-started/installation/) (recommended)
+4. [`az` CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (for `DefaultAzureCredential` login)
 
 ### Install from source
 
+Clone this fork and check out the `advanced-hunter-demo` branch (the working branch for this server):
+
+**macOS / Linux / WSL:**
 ```bash
-git clone <this repo>
-cd defender-ah-mcp
-pip install -e ".[dev]"
+git clone --branch advanced-hunter-demo https://github.com/oferInbar/fabric-rti-mcp.git
+cd fabric-rti-mcp
+uv sync          # or: pip install -e ".[dev]"
 ```
+
+**Windows (PowerShell):**
+```powershell
+git clone --branch advanced-hunter-demo https://github.com/oferInbar/fabric-rti-mcp.git
+cd fabric-rti-mcp
+uv sync          # or: pip install -e ".[dev]"
+```
+
+> Stay on `advanced-hunter-demo` — `main` tracks the upstream Microsoft fabric-rti-mcp repo and does not contain the Advanced Hunting server.
 
 ### MCP client configuration (stdio)
 
+Set `--directory` to the absolute path of your clone. Use forward slashes on macOS/Linux and either forward slashes or escaped backslashes on Windows.
+
+**macOS / Linux:**
 ```json
 {
   "mcp": {
     "servers": {
       "defender-hunting": {
         "command": "uv",
-        "args": ["--directory", "/path/to/defender-advanced-hunting-mcp", "run", "-m", "defender_ah_mcp.server"],
+        "args": ["run", "--directory", "/path/to/fabric-rti-mcp", "defender-advanced-hunting-mcp"],
         "env": {
           "AH_MODE": "VibeHunting"
         }
@@ -76,13 +94,32 @@ pip install -e ".[dev]"
 }
 ```
 
+**Windows:**
+```json
+{
+  "mcp": {
+    "servers": {
+      "defender-hunting": {
+        "command": "uv",
+        "args": ["run", "--directory", "C:/Users/you/code/fabric-rti-mcp", "defender-advanced-hunting-mcp"],
+        "env": {
+          "AH_MODE": "VibeHunting"
+        }
+      }
+    }
+  }
+}
+```
+
+The server itself is pure Python and runs on macOS, Linux, and Windows. Only path syntax differs between platforms.
+
 ## ⚙️ Configuration
 
 ### Advanced Hunting tools
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AH_MODE` | `AdvancedHunting` (core) or `VibeHunting` (core + enrichment). Legacy `true`/`1` maps to `VibeHunting`. | unset → core only |
+| `AH_MODE` | Tool selection. `AdvancedHunting` (or unset) → core only; `VibeHunting` → core + enrichment. Legacy `true`/`1` maps to `VibeHunting`. Parsed case-insensitively; unknown values warn and fall back to core only. | unset (core only) |
 | `HUNTING_ENDPOINT` | Override the Graph Security hunting endpoint path | `/security/runHuntingQuery` |
 | `HUNTING_SCHEMA_ENDPOINT` | Override the schema discovery endpoint path | `/security/runHuntingQuery/schema` |
 | `HUNTING_QUERY_FIELD_NAME` | Override the request payload field name for the query | `Query` |
@@ -138,8 +175,56 @@ The server uses [Azure Identity](https://learn.microsoft.com/en-us/azure/develop
 ## 🐛 Local debugging
 
 ```bash
-pip install -e ".[dev]"
-python -m defender_ah_mcp.server --stdio
+uv sync                                     # or: pip install -e ".[dev]"
+uv run defender-advanced-hunting-mcp        # stdio transport (default)
+```
+
+For HTTP transport, set `DEFENDER_AH_TRANSPORT=http` before running. The same commands work on macOS, Linux, and Windows (PowerShell or cmd).
+
+## 🐳 Docker
+
+A `Dockerfile` is included. The image runs the server in **HTTP transport** mode (stdio doesn't fit a container deployment model since the MCP client launches the process directly).
+
+### Build
+
+```bash
+docker build -t defender-ah-mcp .
+```
+
+### Run
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e AH_MODE=VibeHunting \
+  -e DEFENDER_GRAPH_TENANT_ID=<tenant> \
+  -e DEFENDER_GRAPH_CLIENT_ID=<client-id> \
+  -e DEFENDER_GRAPH_CLIENT_SECRET=<client-secret> \
+  defender-ah-mcp
+```
+
+The MCP endpoint is then available at `http://localhost:3000/mcp`.
+
+### Auth options inside the container
+
+- **App-only (recommended for containers)** — set `DEFENDER_GRAPH_TENANT_ID`, `DEFENDER_GRAPH_CLIENT_ID`, `DEFENDER_GRAPH_CLIENT_SECRET`.
+- **Bearer pass-through** — clients send `Authorization: Bearer <token>` to `/mcp`; the middleware forwards it to Graph (optionally via OBO if `USE_OBO_FLOW=true`).
+- **Managed identity** — when running on Azure (ACA, App Service, AKS with workload identity), no secrets are needed; `DefaultAzureCredential` picks up the assigned identity. Set `DEFENDER_AH_AUTH_PREFER_DEFAULT=true` if app-only env vars are also present.
+- **Azure CLI / interactive login** — not supported inside the container; use one of the above instead.
+
+> Don't bake credentials into the image. Pass them via `-e`, `--env-file`, or your orchestrator's secret store.
+
+### MCP client config (HTTP)
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "defender-hunting": {
+        "url": "http://localhost:3000/mcp"
+      }
+    }
+  }
+}
 ```
 
 ## 🧪 Tests
