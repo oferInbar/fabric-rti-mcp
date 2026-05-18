@@ -68,6 +68,23 @@
                 "${file}"
             ],
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug MCP Server (Docker)",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "127.0.0.1",
+                "port": 5678
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}/defender_ah_mcp",
+                    "remoteRoot": "/usr/local/lib/python3.12/site-packages/defender_ah_mcp"
+                }
+            ],
+            "justMyCode": false,
+            "preLaunchTask": "docker-run-debug"
         }
     ]
 }

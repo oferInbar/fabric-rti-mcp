@@ -1,0 +1,24 @@
+.git
+.github
+.venv
+.pytest_cache
+.ruff_cache
+.vscode
+.vscode copy
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+microsoft_fabric_rti_mcp.egg-info
+tests
+fabric_rti_mcp
+Pr
+scripts
+pytest_output.txt
+CHANGELOG.md
+CONTRIB.md
+RUN_LOCALLY.md
+SECURITY.md
+SUPPORT.md
+CODE_OF_CONDUCT.md
+Ignore

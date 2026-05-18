@@ -422,7 +422,7 @@ async def summarize_hunting_results(
     schema: list[dict[str, str]],
     results: list[dict[str, Any]],
     user_prompt: str | None = None,
-    ctx: Context | None = None,
+    ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Generates natural language summarization of hunting query results using the client LLM.
