@@ -7,7 +7,11 @@ from azure.kusto.data.response import KustoResponseDataSet
 
 from fabric_rti_mcp import __version__
 from fabric_rti_mcp.auth.auth_context import CredentialSource
-from fabric_rti_mcp.services.kusto.kusto_config import KustoConfig
+from fabric_rti_mcp.services.kusto.kusto_config import (
+    DEFAULT_SHOTS_EMBEDDING_METHOD,
+    DEFAULT_SHOTS_SLM_MODEL,
+    KustoConfig,
+)
 from fabric_rti_mcp.services.kusto.kusto_service import (
     KustoConnectionManager,
     kusto_command,
@@ -186,6 +190,42 @@ def test_kusto_known_services_probe_mode_env_overrides_default() -> None:
 
     assert config.known_services_probe_mode == "always"
     assert config.should_probe_known_services(CredentialSource.LOCAL_DEVELOPER) is True
+
+
+@patch.dict(
+    "os.environ",
+    {
+        "KUSTO_SHOTS_EMBEDDING_METHOD": " SLM ",
+        "KUSTO_SHOTS_SLM_MODEL": " E5-SMALL-V2 ",
+    },
+    clear=True,
+)
+def test_kusto_shots_embedding_settings_load_normalized_env_overrides() -> None:
+    config = KustoConfig.from_env()
+
+    assert config.shots_embedding_method == "slm"
+    assert config.shots_slm_model == "e5-small-v2"
+
+
+@patch.dict("os.environ", {}, clear=True)
+def test_kusto_shots_embedding_defaults_are_centralized() -> None:
+    config = KustoConfig.from_env()
+
+    assert config.shots_embedding_method == DEFAULT_SHOTS_EMBEDDING_METHOD
+    assert config.shots_slm_model == DEFAULT_SHOTS_SLM_MODEL
+
+
+@pytest.mark.parametrize(
+    ("env_name", "env_value"),
+    [
+        ("KUSTO_SHOTS_EMBEDDING_METHOD", "unsupported"),
+        ("KUSTO_SHOTS_SLM_MODEL", "unsupported"),
+    ],
+)
+def test_kusto_shots_embedding_settings_reject_invalid_env_values(env_name: str, env_value: str) -> None:
+    with patch.dict("os.environ", {env_name: env_value}, clear=True):
+        with pytest.raises(ValueError, match=rf"Invalid {env_name}=.*Expected one of"):
+            KustoConfig.from_env()
 
 
 @patch.dict("os.environ", {"FABRIC_RTI_KUSTO_RESPONSE_FORMAT": "full_kusto_response"}, clear=True)

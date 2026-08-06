@@ -3,11 +3,20 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from typing import Literal, TypeAlias, get_args
 
 from azure.kusto.data import KustoConnectionStringBuilder
 
 from fabric_rti_mcp.auth.auth_context import CredentialSource
 from fabric_rti_mcp.config import logger
+
+ShotsEmbeddingMethod: TypeAlias = Literal["slm", "aoai"]
+ShotsSlmModel: TypeAlias = Literal["jina-v2-small", "e5-small-v2", "harrier-v1-270m"]
+
+DEFAULT_SHOTS_EMBEDDING_METHOD: ShotsEmbeddingMethod = "aoai"
+DEFAULT_SHOTS_SLM_MODEL: ShotsSlmModel = "harrier-v1-270m"
+SUPPORTED_SHOTS_EMBEDDING_METHODS: tuple[ShotsEmbeddingMethod, ...] = get_args(ShotsEmbeddingMethod)
+SUPPORTED_SHOTS_SLM_MODELS: tuple[ShotsSlmModel, ...] = get_args(ShotsSlmModel)
 
 
 @dataclass(slots=True, frozen=True)
@@ -32,6 +41,8 @@ class KustoEnvVarNames:
     default_service_default_db = "KUSTO_SERVICE_DEFAULT_DB"
     open_ai_embedding_endpoint = "AZ_OPENAI_EMBEDDING_ENDPOINT"
     shots_table = "KUSTO_SHOTS_TABLE"
+    shots_embedding_method = "KUSTO_SHOTS_EMBEDDING_METHOD"
+    shots_slm_model = "KUSTO_SHOTS_SLM_MODEL"
     known_services = "KUSTO_KNOWN_SERVICES"
     eager_connect = "KUSTO_EAGER_CONNECT"
     allow_unknown_services = "KUSTO_ALLOW_UNKNOWN_SERVICES"
@@ -48,6 +59,8 @@ class KustoEnvVarNames:
             KustoEnvVarNames.default_service_default_db,
             KustoEnvVarNames.open_ai_embedding_endpoint,
             KustoEnvVarNames.shots_table,
+            KustoEnvVarNames.shots_embedding_method,
+            KustoEnvVarNames.shots_slm_model,
             KustoEnvVarNames.known_services,
             KustoEnvVarNames.eager_connect,
             KustoEnvVarNames.allow_unknown_services,
@@ -62,14 +75,30 @@ def _env_bool(name: str) -> bool:
     return os.getenv(name, "false").lower() in ("true", "1")
 
 
+def _env_choice(name: str, default: str, supported_values: tuple[str, ...]) -> str:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    normalized_value = raw_value.strip().lower()
+    if normalized_value not in supported_values:
+        expected_values = ", ".join(supported_values)
+        raise ValueError(f"Invalid {name}='{raw_value}'. Expected one of: {expected_values}.")
+    return normalized_value
+
+
 @dataclass(slots=True, frozen=True)
 class KustoConfig:
     # Default service. Will be used if no specific service is provided.
     default_service: KustoServiceConfig | None = None
-    # Optional OpenAI embedding endpoint to be used for embeddings where applicable.
+    # Optional OpenAI embedding endpoint used for AOAI embeddings.
     open_ai_embedding_endpoint: str | None = None
     # Default shots table name for the kusto_get_shots tool.
     shots_table: str | None = None
+    # Default embedding method for kusto_get_shots.
+    shots_embedding_method: str = DEFAULT_SHOTS_EMBEDDING_METHOD
+    # Default SLM model for kusto_get_shots.
+    shots_slm_model: str = DEFAULT_SHOTS_SLM_MODEL
     # List of known Kusto services. If empty, no services are configured.
     known_services: list[KustoServiceConfig] | None = None
     # Whether to eagerly connect to the default service on startup.
@@ -103,6 +132,16 @@ class KustoConfig:
 
         open_ai_embedding_endpoint = os.getenv(KustoEnvVarNames.open_ai_embedding_endpoint, None)
         shots_table = os.getenv(KustoEnvVarNames.shots_table, None)
+        shots_embedding_method = _env_choice(
+            KustoEnvVarNames.shots_embedding_method,
+            DEFAULT_SHOTS_EMBEDDING_METHOD,
+            SUPPORTED_SHOTS_EMBEDDING_METHODS,
+        )
+        shots_slm_model = _env_choice(
+            KustoEnvVarNames.shots_slm_model,
+            DEFAULT_SHOTS_SLM_MODEL,
+            SUPPORTED_SHOTS_SLM_MODELS,
+        )
         known_services_string = os.getenv(KustoEnvVarNames.known_services, None)
         known_services: list[KustoServiceConfig] | None = None
         eager_connect = _env_bool(KustoEnvVarNames.eager_connect)
@@ -164,16 +203,18 @@ class KustoConfig:
                 )
 
         return KustoConfig(
-            default_service,
-            open_ai_embedding_endpoint,
-            shots_table,
-            known_services,
-            eager_connect,
-            allow_unknown_services,
-            timeout_seconds,
-            deeplink_style,
-            response_format,
-            known_services_probe_mode,
+            default_service=default_service,
+            open_ai_embedding_endpoint=open_ai_embedding_endpoint,
+            shots_table=shots_table,
+            shots_embedding_method=shots_embedding_method,
+            shots_slm_model=shots_slm_model,
+            known_services=known_services,
+            eager_connect=eager_connect,
+            allow_unknown_services=allow_unknown_services,
+            timeout_seconds=timeout_seconds,
+            deeplink_style=deeplink_style,
+            response_format=response_format,
+            known_services_probe_mode=known_services_probe_mode,
         )
 
     def should_probe_known_services(self, credential_source: CredentialSource) -> bool:

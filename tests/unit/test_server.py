@@ -116,6 +116,15 @@ def test_get_shots_registration_metadata(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert get_shots.description is not None
     assert get_shots.description.strip().splitlines()[0] == "Find similar saved KQL queries."
+    assert "https://learn.microsoft.com/en-us/kusto/functions-library/slm-embeddings-fl" in get_shots.description
+    embedding_method_options = get_shots.inputSchema["properties"]["embedding_method"]["anyOf"]
+    slm_model_options = get_shots.inputSchema["properties"]["slm_model_name"]["anyOf"]
+    assert next(option["enum"] for option in embedding_method_options if "enum" in option) == ["slm", "aoai"]
+    assert next(option["enum"] for option in slm_model_options if "enum" in option) == [
+        "jina-v2-small",
+        "e5-small-v2",
+        "harrier-v1-270m",
+    ]
     assert get_shots.annotations is not None
     assert get_shots.annotations.readOnlyHint is True
 
